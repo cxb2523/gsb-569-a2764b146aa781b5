@@ -1,0 +1,394 @@
+.right-panel {
+  min-height: 100%;
+}
+
+#agent-tab {
+  position: relative;
+}
+
+.agent-panel {
+  --agent-bg: #eee;
+  --agent-surface: #fff;
+  --agent-line: #ccc;
+  --agent-text: #222;
+  --agent-muted: #555;
+  --agent-accent: #08f;
+  --agent-ok: #2a9d5c;
+  --agent-error: #e05;
+  --agent-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--agent-bg);
+  color: var(--agent-text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.agent-panel__log,
+.agent-panel__log *,
+.agent-panel__input {
+  -webkit-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+.agent-panel__log button,
+.agent-tool__summary,
+.agent-tool__summary * {
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Toolbar ------------------------------------------------------------ */
+
+.agent-panel__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--agent-line);
+}
+
+.agent-panel__balance {
+  margin-right: auto;
+  color: var(--agent-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Same treatment as .action-button, sized to content. */
+.agent-panel__button {
+  padding: 3.5px 10px;
+  background-color: #ddd;
+  color: var(--agent-muted);
+  border: none;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.agent-panel__button:hover {
+  background-color: var(--agent-surface);
+  color: #111;
+}
+
+/* Log ---------------------------------------------------------------- */
+
+.agent-panel__log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 10px;
+}
+
+.agent-panel__log::-webkit-scrollbar {
+  width: 6px;
+}
+
+.agent-panel__log::-webkit-scrollbar-thumb {
+  background-color: #aaa;
+  border-radius: 4px;
+}
+
+.agent-panel__empty {
+  margin: auto 12px;
+  color: var(--agent-muted);
+  text-align: center;
+}
+
+.agent-msg {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.agent-msg--user {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 6px 10px;
+  background: var(--agent-surface);
+  border: 1px solid var(--agent-line);
+}
+
+.agent-msg--assistant {
+  padding: 0 2px;
+  white-space: normal;
+}
+
+.agent-msg--assistant > :first-child { margin-top: 0; }
+.agent-msg--assistant > :last-child { margin-bottom: 0; }
+
+.agent-msg--assistant p,
+.agent-msg--assistant ul,
+.agent-msg--assistant ol,
+.agent-msg--assistant pre {
+  margin: 0 0 8px;
+}
+
+.agent-msg--assistant ul,
+.agent-msg--assistant ol {
+  padding-left: 18px;
+}
+
+.agent-msg--assistant h1,
+.agent-msg--assistant h2,
+.agent-msg--assistant h3 {
+  margin: 10px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.agent-msg--assistant code {
+  font: 11.5px/1.4 var(--agent-mono);
+  background: var(--agent-surface);
+  padding: 0 3px;
+}
+
+.agent-msg--assistant pre {
+  padding: 6px 8px;
+  background: var(--agent-surface);
+  overflow-x: auto;
+}
+
+.agent-msg--assistant pre code {
+  padding: 0;
+  background: none;
+}
+
+.agent-msg--assistant a {
+  color: var(--agent-accent);
+}
+
+.agent-note {
+  color: var(--agent-muted);
+  font-size: 12px;
+}
+
+/* Tool calls: one quiet line each, the status dot carries the state. */
+
+.agent-tool {
+  border-left: 2px solid var(--agent-line);
+  padding-left: 8px;
+}
+
+.agent-tool__summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #666;
+  cursor: pointer;
+  list-style: none;
+}
+
+.agent-tool__summary::-webkit-details-marker {
+  display: none;
+}
+
+.agent-tool__summary:hover {
+  color: #111;
+}
+
+.agent-tool__status {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--agent-muted);
+}
+
+.agent-tool.is-pending .agent-tool__status {
+  background: var(--agent-accent);
+  animation: agent-pulse 1s ease-in-out infinite;
+}
+
+.agent-tool.is-ok .agent-tool__status {
+  background: var(--agent-ok);
+}
+
+.agent-tool.is-error .agent-tool__status {
+  background: var(--agent-error);
+}
+
+.agent-tool.is-error .agent-tool__name {
+  color: var(--agent-error);
+}
+
+.agent-tool__name {
+  font: 12px/1.4 var(--agent-mono);
+}
+
+.agent-tool__body {
+  margin: 4px 0 0;
+  max-height: 180px;
+  overflow: auto;
+  padding: 6px 8px;
+  background: var(--agent-surface);
+  color: #444;
+  font: 11px/1.45 var(--agent-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Errors ------------------------------------------------------------- */
+
+.agent-error {
+  padding: 8px 10px;
+  background: #fff0f3;
+  border-left: 2px solid var(--agent-error);
+}
+
+.agent-error p {
+  margin: 0;
+  color: var(--agent-error);
+}
+
+.agent-error__action {
+  margin-top: 6px;
+}
+
+/* Composer ----------------------------------------------------------- */
+
+.agent-panel__composer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--agent-line);
+}
+
+.agent-panel__input {
+  min-height: 54px;
+  max-height: 200px;
+  resize: vertical;
+  padding: 6px 8px;
+  background: var(--agent-surface);
+  color: var(--agent-text);
+  border: 1px solid transparent;
+  border-radius: 0;
+  font: inherit;
+}
+
+.agent-panel__input:focus {
+  outline: none;
+  border-color: var(--agent-accent);
+}
+
+.agent-panel__send {
+  align-self: flex-end;
+  min-width: 80px;
+  padding: 3.5px 12px;
+  background-color: #ddd;
+  color: var(--agent-accent);
+  border: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.agent-panel__send:hover {
+  background-color: var(--agent-surface);
+}
+
+.agent-panel.is-running .agent-panel__send {
+  color: var(--agent-error);
+}
+
+.agent-panel__send:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.agent-panel button:focus-visible,
+.agent-panel select:focus-visible {
+  outline: 1px solid var(--agent-accent);
+  outline-offset: 1px;
+}
+
+/* The Agent tab is off until the agents button turns it on. */
+.panel-tabs .tab[hidden] {
+  display: none;
+}
+
+/* Tab and agents button while a run is in progress (seen from elsewhere). */
+.agent-tab--running {
+  color: #08f;
+}
+
+.agent-panel__composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agent-panel__model {
+  appearance: none;
+  min-width: 0;
+  padding: 3.5px 24px 3.5px 10px;
+  background-color: #ddd;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23888'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  color: var(--agent-muted);
+  border: none;
+  border-radius: 0;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.agent-panel__model:hover {
+  background-color: var(--agent-surface);
+  color: #111;
+}
+
+.agent-panel__model:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.agent-panel__model:disabled:hover {
+  background-color: #ddd;
+  color: var(--agent-muted);
+}
+
+.agent-thinking {
+  display: flex;
+  align-items: center;
+  height: 14px;
+  padding: 0 2px;
+}
+
+.agent-thinking__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--agent-accent);
+  animation: agent-breathe 1.1s ease-in-out infinite;
+}
+
+@keyframes agent-breathe {
+  0%, 100% { transform: scale(0.5); opacity: 0.6; }
+  50%      { transform: scale(1);   opacity: 1; }
+}
+
+@keyframes agent-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-tool.is-pending .agent-tool__status,
+  .agent-thinking__dot {
+    animation: none;
+  }
+}

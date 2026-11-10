@@ -1,0 +1,324 @@
+<div class="viewport-controls">
+  <!-- Mode Select -->
+  <div class="left-controls-container" id="left-controls-container">
+    <select class="mode-select" id="interaction-modes" data-tooltip="Interaction Modes">
+      <option value="object" selected>OBJECT MODE</option>
+      <option value="edit">EDIT MODE</option>
+      <option value="uv">UV MODE</option>
+      <option value="paint">TEXTURE PAINT</option>
+    </select>
+
+    <select class="paint-map-select" id="paint-map-select" data-tooltip="Paint Target">
+      <option value="baseColor" selected>BASE COLOR</option>
+      <option value="metalness">METALNESS</option>
+      <option value="roughness">ROUGHNESS</option>
+      <option value="normal">NORMAL</option>
+    </select>
+
+    <!-- Selection Buttons -->
+    <div class="selection-mode hidden">
+      <button class="selection-button active" data-tool="vertex" data-tooltip="Vertex Select">
+        <img src="assets/icons/point-select.svg" alt="Vertex Select" />
+      </button>
+      <button class="selection-button" data-tool="edge" data-tooltip="Edge Select">
+        <img src="assets/icons/edge-select.svg" alt="Edge Select" />
+      </button>
+      <button class="selection-button" data-tool="face" data-tooltip="Face Select">
+        <img src="assets/icons/face-select.svg" alt="Face Select" />
+      </button>
+    </div>
+
+    <div class="menu-item" id="object-menu" data-tooltip="Object Menu">OBJECT
+      <ul class="submenu">
+        <li data-action="center-object">Center</li>
+        <li class="submenu-item">
+          Set Origin
+          <span class="arrow">&#9656;</span>
+          <ul class="submenu right">
+            <li data-action="geometry-origin">Geometry to Origin</li>
+            <li data-action="origin-geometry">Origin to Geometry</li>
+          </ul>
+        </li>
+        <li class="submenu-item">
+          Apply
+          <span class="shortcut" data-shortcut-combo="ctrl+a"></span>
+          <span class="arrow">&#9656;</span>
+          <ul class="submenu right">
+            <li data-action="apply-location">Location</li>
+            <li data-action="apply-rotation">Rotation</li>
+            <li data-action="apply-scale">Scale</li>
+            <li data-action="apply-transform">Transform</li>
+          </ul>
+        </li>
+        <li data-action="duplicate-object">Duplicate
+          <span class="shortcut" data-shortcut-key="duplicate"></span>
+        </li>
+        <li data-action="join-object">Join
+          <span class="shortcut" data-shortcut-key="join"></span>
+        </li>
+        <li class="divider"></li>
+        <li data-action="copy-objects">Copy Objects
+          <span class="shortcut" data-shortcut-combo="ctrl+c"></span>
+        </li>
+        <li data-action="paste-objects">Paste Objects
+          <span class="shortcut" data-shortcut-combo="ctrl+v"></span>
+        </li>
+        <li class="divider"></li>
+        <li class="submenu-item">
+          Shade
+          <span class="arrow">&#9656;</span>
+          <ul class="submenu right">
+            <li data-action="shade-smooth">Shade Smooth</li>
+            <li data-action="shade-flat">Shade Flat</li>
+            <li data-action="shade-auto">Shade Auto</li>
+          </ul>
+        </li>
+        <li class="submenu-item">
+          Hide/Unhide
+          <span class="arrow">&#9656;</span>
+          <ul class="submenu right">
+            <li data-action="hide-selected">Hide Selected
+              <span class="shortcut" data-shortcut-key="hideSelected"></span>
+            </li>
+            <li data-action="hide-unselected">Hide Unselected
+              <span class="shortcut" data-shortcut-key="hideUnselected"></span>
+            </li>
+            <li data-action="unhide-all">Unhide All
+              <span class="shortcut" data-shortcut-key="unhideAll"></span>
+            </li>
+          </ul>
+        </li>
+        <li class="divider"></li>
+        <li data-action="delete-object">Delete
+          <span class="shortcut">DEL</span>
+        </li>
+      </ul>
+    </div>
+
+    <button class="feature-button" id="generate-texture" data-tooltip="Generate Texture">
+      <img src="assets/icons/generate.svg" class="generate-icon" width="16" height="16"/>
+      <span class="label">GENERATE</span>
+    </button>
+
+    <div class="menu-item hidden" id="select-menu" data-tooltip="Select Menu">SELECT
+      <ul class="submenu">
+        <li data-action="select-all">All
+          <span class="shortcut" data-shortcut-key="selectAll"></span>
+        </li>
+        <li data-action="select-none">None</li>
+        <li data-action="select-loops">Select Loops
+          <span class="shortcut" data-shortcut-combo="alt+lmb"></span>
+        </li>
+        <li data-action="select-rings">Select Rings</li>
+        <li data-action="select-linked">Select Linked
+          <span class="shortcut" data-shortcut-key="selectLinked"></span>
+        </li>
+      </ul>
+    </div>
+    <div class="menu-item hidden" id="mesh-menu" data-tooltip="Mesh Menu">MESH
+      <ul class="submenu">
+        <li data-action="subdivide-selection">Subdivide</li>
+        <li class="divider"></li>
+        <li data-action="duplicate-selection">Duplicate
+          <span class="shortcut" data-shortcut-key="duplicate">SHIFT+D</span>
+        </li>
+        <li data-action="create-edge-face">New Edge/Face
+          <span class="shortcut" data-shortcut-key="createFace">F</span>
+        </li>
+        <li data-action="bridge-selection">Bridge Edges/Faces</li>
+        <li class="divider"></li>
+        <li class="submenu-item">
+          Merge
+          <span class="shortcut" data-shortcut-key="merge">M</span>
+          <span class="arrow">&#9656;</span>
+          <ul class="submenu right">
+            <li data-action="merge-at-center">At Center</li>
+            <li data-action="merge-at-first">At First</li>
+            <li data-action="merge-at-last">At Last</li>
+            <li data-action="merge-by-distance">By Distance</li>
+          </ul>
+        </li>
+        <li data-action="split-selection">Split
+          <span class="shortcut" data-shortcut-key="split">Y</span>
+        </li>
+        <li data-action="separate-selection">Separate
+          <span class="shortcut" data-shortcut-key="separate">P</span>
+        </li>
+        <li class="divider"></li>
+        <li data-action="flip-normals">Flip Normals</li>
+        <li class="submenu-item">
+          Sharp
+          <span class="arrow">&#9656;</span>
+          <ul class="submenu right">
+            <li data-action="mark-sharp">Mark Sharp</li>
+            <li data-action="clear-sharp">Clear Sharp</li>
+          </ul>
+        </li>
+        <li class="divider"></li>
+        <li class="submenu-item">
+          Delete
+          <span class="shortcut">DEL</span>
+          <span class="arrow">&#9656;</span>
+          <ul class="submenu right">
+            <li data-action="delete-vertices">Vertices</li>
+            <li data-action="delete-edges">Edges</li>
+            <li data-action="delete-faces">Faces</li>
+            <li data-action="delete-only-edges-faces">Only Edges & Faces</li>
+            <li data-action="delete-only-faces">Only Faces</li>
+            <li class="divider"></li>
+            <li data-action="dissolve-vertices">Dissolve Vertices</li>
+            <li data-action="dissolve-edges">Dissolve Edges</li>
+            <li data-action="dissolve-faces">Dissolve Faces</li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+    <div class="menu-item hidden" id="uv-menu" data-tooltip="UV Menu">UV
+      <ul class="submenu">
+        <li data-action="mark-seam">Mark Seam
+          <span class="shortcut" data-shortcut-key="markSeam">SHIFT+Q</span>
+        </li>
+        <li data-action="clear-seam">Clear Seam</li>
+        <li data-action="clear-uv">Clear UV</li>
+        <li class="divider"></li>
+        <li data-action="uv-unwrap">UV Unwrap</li>
+        <li data-action="auto-uv-unwrap">Auto UV Unwrap</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Middle Controls -->
+  <div class="middle-controls-container" id="middle-controls-container">
+  <div class="transform-controls" id="transform-controls">
+      <select class="transform-orientation-select" id="transform-orientation" data-tooltip="Transform Orientation">
+        <option value="global" selected>GLOBAL</option>
+        <option value="local">LOCAL</option>
+      </select>
+
+      <button class="toggle-button" id="snap-button" data-tooltip="Snap">
+        <img class="icon-off" src="assets/icons/snap.svg" alt="Snap Off"/>
+        <img class="icon-on" src="assets/icons/snapping.svg" alt="Snap On"/>
+      </button>
+
+      <select class="snapping-to-select" id="snapping-to" data-tooltip="Snapping To">
+        <option value="vertex" selected>VERTEX</option>
+        <option value="edge">EDGE</option>
+        <option value="face">FACE</option>
+      </select>
+
+      <button class="toggle-button" id="mirror-button" data-tooltip="Mirror">
+        <img class="icon-off" src="assets/icons/mirror.svg" alt="Mirror Off"/>
+        <img class="icon-on" src="assets/icons/mirroring.svg" alt="Mirror On"/>
+      </button>
+
+      <div class="mirror-dropdown" id="mirror-dropdown">
+        <button class="mirror-dropdown-trigger" id="mirror-dropdown-trigger" data-tooltip="Mirror Options">
+          <span class="label">MIRROR</span>
+          <svg class="arrow" viewBox="0 0 10 6" width="10" height="6" aria-hidden="true">
+            <polyline points="1,1 5,5 9,1" fill="none" stroke="currentColor"
+                      stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+
+        <div class="mirror-panel" id="mirror-panel">
+          <!-- Axis -->
+          <div class="mirror-panel-row">
+            <span class="mirror-panel-label">Axis</span>
+            <div class="axis-toggle-group">
+              <label class="axis-toggle">
+                <input type="checkbox" name="mirror-axis" value="x" checked />
+                <span>X</span>
+              </label>
+              <label class="axis-toggle">
+                <input type="checkbox" name="mirror-axis" value="y" />
+                <span>Y</span>
+              </label>
+              <label class="axis-toggle">
+                <input type="checkbox" name="mirror-axis" value="z" />
+                <span>Z</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Clipping -->
+          <div class="mirror-panel-row">
+            <label class="mirror-checkbox">
+              <input type="checkbox" id="mirror-clipping" />
+              <span>Clipping</span>
+            </label>
+          </div>
+
+          <!-- Merge -->
+          <div class="mirror-panel-row mirror-merge-row">
+            <label class="mirror-checkbox">
+              <input type="checkbox" id="mirror-merge" checked />
+              <span>Merge</span>
+            </label>
+            <input type="number" class="mirror-number-input" id="mirror-merge-distance"
+                value="0.001" min="0" step="0.001" />
+          </div>
+
+          <div class="mirror-panel-divider"></div>
+
+          <!-- Apply -->
+          <button class="mirror-apply-button" id="mirror-apply">Apply</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Brush Settings (Texture Paint) -->
+    <div class="brush-settings" id="brush-settings">
+      <div class="brush-color-wrapper" data-tooltip="Brush Color" id="brush-color-control">
+        <input type="color" class="brush-color-input" id="brush-color" value="#ffffff" />
+      </div>
+
+      <div class="brush-slider-wrapper" data-tooltip="Brush Value" id="brush-value-control">
+        <span class="brush-slider-label">VALUE</span>
+        <input type="range" class="brush-slider" id="brush-value" min="0" max="1" step="0.01" value="1" />
+        <span class="brush-slider-value" id="brush-value-value">1.00</span>
+      </div>
+
+      <div class="brush-slider-wrapper" data-tooltip="Brush Size">
+        <span class="brush-slider-label">SIZE</span>
+        <input type="range" class="brush-slider" id="brush-size" min="1" max="200" step="1" value="20" />
+        <span class="brush-slider-value" id="brush-size-value">20</span>
+      </div>
+
+      <div class="brush-slider-wrapper" data-tooltip="Brush Opacity">
+        <span class="brush-slider-label">OPACITY</span>
+        <input type="range" class="brush-slider" id="brush-opacity" min="0" max="1" step="0.01" value="1" />
+        <span class="brush-slider-value" id="brush-opacity-value">1.00</span>
+      </div>
+
+      <div class="brush-slider-wrapper" data-tooltip="Brush Hardness">
+        <span class="brush-slider-label">HARD</span>
+        <input type="range" class="brush-slider" id="brush-hardness" min="0" max="1" step="0.01" value="0.8" />
+        <span class="brush-slider-value" id="brush-hardness-value">0.80</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Controls -->
+  <div class="right-controls-container" id="right-controls-container">
+    <div class="top-controls-row">
+      <button class="xray-button" id="xray-button" data-tooltip="X-Ray Display">
+        <img src="assets/icons/xray.svg" alt="X-Ray"/>
+      </button>
+
+      <select class="camera-select" id="cameraDropdown" data-tooltip="Camera View">
+        <option value="perspective-camera" selected>CAMERA</option>
+      </select>
+      
+      <select class="shading-select" id="shading-modes" data-tooltip="Viewport Shading">
+        <option value="material">MATERIAL</option>
+        <option value="solid" selected>SOLID</option>
+        <option value="normal">NORMAL</option>
+        <option value="wireframe">WIREFRAME</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="tool-input-display" class="tool-input-display">
+    Translation: 2m (2m) along global Z
+  </div>
+</div>

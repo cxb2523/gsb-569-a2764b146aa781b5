@@ -1,0 +1,226 @@
+import * as THREE from 'three';
+import { MeshDataBuilders } from './MeshDataBuilders.js';
+import { MeshRendererAdapter } from '../geometry/MeshRendererAdapter.js';
+import { DEFAULT_SHADING_MODE, DEFAULT_SHADING_ANGLE } from '../utils/ShadingUtils.js';
+
+export const PRIMITIVE_DEFAULTS = {
+  Plane: { width: 1, height: 1 },
+  Cube: { width: 1, height: 1, depth: 1 },
+  Circle: { radius: 0.5, segments: 32 },
+  Sphere: { radius: 0.5, widthSegments: 16, heightSegments: 12 },
+  Cylinder: { radius: 0.5, height: 1, radialSegments: 16 },
+  Cone: { radius: 0.5, height: 1, radialSegments: 16 },
+  Torus: { radius: 0.5, tube: 0.2, radialSegments: 24, tubularSegments: 12 },
+};
+
+export const MESH_TYPES = Object.keys(PRIMITIVE_DEFAULTS);
+
+const BUILDERS = {
+  Plane: (p) => MeshDataBuilders.createPlaneMeshData(p),
+  Cube: (p) => MeshDataBuilders.createCubeMeshData(p),
+  Circle: (p) => MeshDataBuilders.createCircleMeshData(p),
+  Sphere: (p) => MeshDataBuilders.createSphereMeshData(p),
+  Cylinder: (p) => MeshDataBuilders.createCylinderMeshData(p),
+  Cone: (p) => MeshDataBuilders.createConeMeshData(p),
+  Torus: (p) => MeshDataBuilders.createTorusMeshData(p),
+};
+
+export class ObjectFactory {
+  constructor(editor) {
+    this.editor = editor;
+  }
+
+  getDefaultParams(type) {
+    return { ...(PRIMITIVE_DEFAULTS[type] || {}) };
+  }
+
+  createGeometry(type, { params = {}, name } = {}) {
+    const builder = BUILDERS[type];
+    if (!builder) return null;
+
+    const resolved = { ...this.getDefaultParams(type), ...params };
+    const meshData = builder(resolved);
+
+    const mode = DEFAULT_SHADING_MODE;
+    const angle = DEFAULT_SHADING_ANGLE;
+    const sharps = new Set();
+
+    const { geometry, renderBuffer } = MeshRendererAdapter.toBufferGeometry(meshData, { mode, angle, sharps });
+    
+    const material = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.2, roughness: 0.2, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData.meshData = meshData;
+    mesh.userData.renderBuffer = renderBuffer;
+    mesh.userData.shading = mode;
+    mesh.userData.shadingAngle = angle;
+    mesh.userData.sharp = sharps;
+    mesh.userData.seam = new Set();
+    mesh.position.set(0, 0, 0);
+    mesh.name = this.editor.nameManager.generateUniqueName(name || type);
+    return mesh;
+  }
+
+  createLight(type) {
+    let light;
+
+    switch (type) {
+      case 'Ambient':
+        light = new THREE.AmbientLight(0xffffff, 5);
+        break;
+
+      case 'Directional':
+        light = new THREE.DirectionalLight(0xffffff, 10);
+        light.position.set(5, 5, 5);
+        light.shadow.normalBias = 0.05;
+        light.castShadow = true;
+        break;
+
+      case 'Hemisphere':
+        light = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+        break;
+
+      case 'Point':
+        light = new THREE.PointLight(0xffffff, 10, 10);
+        light.position.set(0, 0, 0);
+        light.shadow.normalBias = 0.05;
+        light.castShadow = true;
+        break;
+
+      case 'Spot':
+        light = new THREE.SpotLight(0xffffff, 100);
+        light.position.set(5, 5, 5);
+        light.shadow.normalBias = 0.05;
+        light.angle = Math.PI * 0.1;
+        light.penumbra = 0;
+        light.distance = 20;
+        light.castShadow = true;
+        break;
+
+      default: return null;
+    }
+    light.name = this.editor.nameManager.generateUniqueName(type);
+    return light;
+  }
+
+  createCamera(type) {
+    let camera;
+
+    switch (type) {
+      case 'Perspective':
+        camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
+        break;
+
+      case 'Orthographic': {
+        const aspect = window.innerWidth / window.innerHeight;
+        const frustumSize = 2;
+        camera = new THREE.OrthographicCamera(
+          -frustumSize * aspect / 2, frustumSize * aspect / 2,
+          frustumSize / 2, -frustumSize / 2,
+          0.1, 2000
+        );
+        break;
+      }
+      default: return null;
+    }
+
+    camera.position.set(0, 0, 0);
+    camera.lookAt(0, 0, -1);
+    camera.name = this.editor.nameManager.generateUniqueName(type);
+
+    return camera;
+  }
+
+  createGroup(type = 'Group') {
+    const group = new THREE.Group();
+    group.name = this.editor.nameManager.generateUniqueName(type);
+    group.position.set(0, 0, 0);
+    return group;
+  }
+
+  createImageRef(type, file) {
+    return new Promise ((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+
+      new THREE.TextureLoader().load(
+        url,
+        (texture) => {
+          URL.revokeObjectURL(url);
+
+          texture.colorSpace = THREE.SRGBColorSpace;
+          const { width, height } = texture.image;
+          const aspect = width / height;
+
+          const planeW = aspect >= 1 ? 1 : aspect;
+          const planeH = aspect >= 1 ? 1 / aspect : 1;
+
+          const geometry = new THREE.PlaneGeometry(planeW, planeH);
+          const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            side: THREE.DoubleSide,
+            alphaTest: 0.01,
+            opacity: 1.0,
+            depthTest: true,
+            depthWrite: true,
+          });
+          material.allowOverride = false;
+
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.name = this.editor.nameManager.generateUniqueName(type);
+          mesh.userData.isImageRef = true;
+          mesh.userData.selectable = true;
+          mesh.userData.imageSize = { width, height };
+
+          resolve(mesh);
+        },
+        undefined,
+        (error) => {
+          URL.revokeObjectURL(url);
+          reject(error);
+        }
+      );
+    });
+  }
+
+  createHelper(object) {
+    let helper = null;
+
+    if (object.isCamera) {
+      helper = new THREE.CameraHelper(object);
+      helper.setColors?.(
+        new THREE.Color(0xffffff),
+        new THREE.Color(0xffffff),
+        new THREE.Color(0xffffff),
+        new THREE.Color(0xffffff),
+        new THREE.Color(0xffffff)
+      );
+    } else if (object.isPointLight) {
+      helper = new THREE.PointLightHelper(object, 0.3);
+    } else if (object.isDirectionalLight) {
+      helper = new THREE.DirectionalLightHelper(object, 0.5);
+    } else if (object.isSpotLight) {
+      helper = new THREE.SpotLightHelper(object);
+    } else if (object.isHemisphereLight) {
+      helper = new THREE.HemisphereLightHelper(object, 0.5);
+    } else if (object.isSkinnedMesh) {
+      helper = new THREE.SkeletonHelper(object.skeleton.bones[ 0 ]);
+    } else if (object.isBone === true && object.parent && object.parent.isBone !== true) {
+      helper = new THREE.SkeletonHelper(object);
+    } else {
+      return;
+    }
+
+    const geometry = new THREE.SphereGeometry(1, 4, 2);
+    const material = new THREE.MeshBasicMaterial({ color: 0xff0000, visible: false, wireframe: true });
+    const picker = new THREE.Mesh(geometry, material);
+
+    picker.name = 'picker';
+    picker.userData.object = object;
+
+    helper.add(picker);
+
+    return helper;
+  }
+}

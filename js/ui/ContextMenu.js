@@ -1,0 +1,227 @@
+import { matchesShortcut } from '../utils/FormatLabel.js';
+
+export default class ContextMenu {
+  constructor( editor ) {
+    this.editor = editor;
+    this.signals = editor.signals;
+    this.keyHandler = editor.keyHandler;
+    this.uiLoader = editor.uiLoader;
+    this.selection = editor.selection;
+    this.editSelection = editor.editSelection;
+    this.objectActions = editor.objectActions;
+    this.editActions = editor.editActions;
+    this.uvActions = editor.uvActions;
+    this.menuEl = null;
+    this.currentMode = 'object';
+    this.closeTimeout = null;
+
+    this.lastMouse = { x: 0, y: 0 };
+    this.menuTrigger = null;
+
+    this.ready = this.load();
+    this.setupListeners();
+  }
+
+  async load() {
+    const container = await this.uiLoader.loadComponent('#floating-container', 'components/context-menu.html');
+
+    if (!container) return;
+
+    this.menuEl = container.querySelector('.context-menu');
+    this.wrapper = this.menuEl.closest('.context-menu-wrapper');
+
+    const appContainer = document.querySelector('.app-container');
+    const canvas = document.querySelector('#three-canvas');
+
+    appContainer.addEventListener('contextmenu', (e) => {
+      if (e.target === canvas) return;
+
+      this.hide();
+
+      if (e.target.closest('.agent-panel')) return;
+      
+      e.preventDefault();
+    });
+
+    canvas.addEventListener('contextmenu', (e) => {
+      if (e.button === 2) {
+        e.preventDefault();
+
+        this.menuTrigger = 'mouse';
+        this.show(e.clientX, e.clientY);
+      }
+    });
+
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('.context-menu')) return;
+      this.hide();
+    });
+
+    document.addEventListener('mousedown', (e) => {
+      if (e.button === 1) {
+        if (e.target.closest('.context-menu')) return;
+        this.hide();
+      }
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      this.lastMouse.x = e.clientX;
+      this.lastMouse.y = e.clientY;
+    });
+
+    this.menuEl.querySelectorAll('.item').forEach((item) => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = item.getAttribute('data-action');
+
+        // Find the closest menu-section parent to know the mode
+        const section = item.closest('.menu-section');
+        const mode = section ? section.dataset.mode : 'object';
+
+        if (mode === 'object') {
+          this.objectActions.handleAction(action);
+        } else if (mode === 'mesh') {
+          this.editActions.handleAction(action);
+        } else if (mode === 'delete') {
+          this.editActions.handleAction(action);
+        } else if (mode === 'apply') {
+          this.objectActions.handleAction(action);
+        } else if (mode === 'merge') {
+          this.editActions.handleAction(action);
+        } else if (mode === 'uv') {
+          this.uvActions.handleAction(action);
+        }
+
+        if (this.closeTimeout) {
+          clearTimeout(this.closeTimeout);
+          this.closeTimeout = null;
+        }
+
+        this.hide();
+      });
+    });
+
+    this.wrapper.addEventListener('mouseenter', () => {
+      if (this.closeTimeout) {
+        clearTimeout(this.closeTimeout);
+        this.closeTimeout = null;
+      }
+    });
+
+    this.wrapper.addEventListener('mouseleave', () => {
+      this.closeTimeout = setTimeout(() => {
+        this.hide();
+      }, 250);
+    });
+  }
+
+  setupListeners() {
+    this.signals.modeChanged.add((newMode) => {
+      this.currentMode = newMode;
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Delete') {
+        this.menuTrigger = 'delete';
+        this.show(this.lastMouse.x, this.lastMouse.y);
+      } else if (matchesShortcut(e, 'ctrl+a')) {
+        this.menuTrigger = 'apply';
+        this.show(this.lastMouse.x, this.lastMouse.y);
+      } else if (matchesShortcut(e, 'shift+a')) {
+        this.menuTrigger = 'add';
+        this.show(this.lastMouse.x, this.lastMouse.y);
+      } else if (matchesShortcut(e, this.editor.keyHandler.shortcuts['merge'])) {
+        this.menuTrigger = 'merge';
+        this.show(this.lastMouse.x, this.lastMouse.y);
+      }
+    })
+  }
+
+  show(x, y) {
+    if (!this.menuEl || !this.wrapper) return;
+
+    this.menuEl.querySelectorAll('.menu-section').forEach(section => {
+      section.style.display = 'none';
+    });
+
+    let visible = false;
+    if (this.menuTrigger === 'mouse' && this.currentMode === 'object') {
+      this.showSection('object');
+      visible = true;
+    }
+
+    if (this.menuTrigger === 'apply' && this.currentMode === 'object') {
+      this.showSection('apply');
+      visible = true;
+    }
+
+    if (this.menuTrigger === 'add' && (this.currentMode === 'object' || this.currentMode === 'edit')) {
+      this.showSection('add');
+      visible = true;
+    }
+
+    if (this.menuTrigger === 'mouse' && this.currentMode === 'edit') {
+      this.showSection('mesh');
+      visible = true;
+    }
+
+    if (this.menuTrigger === 'delete' && this.currentMode === 'edit') {
+      this.showSection('delete');
+      visible = true;
+    }
+
+    if (this.menuTrigger === 'merge' && this.currentMode === 'edit') {
+      this.showSection('merge');
+      visible = true;
+    }
+
+    if (this.menuTrigger === 'mouse' && this.currentMode === 'uv') {
+      this.showSection('uv');
+      visible = true;
+    }
+
+    if (!visible) return;
+
+    this.wrapper.style.display = 'block';
+    this.positionMenu(x, y);
+  }
+
+  showSection(mode) {
+    if (!this.editor.keyHandler.startInteraction('context-menu')) return;
+    const section = this.menuEl.querySelector(`.menu-section[data-mode="${mode}"]`);
+    if (section) section.style.display = 'block';
+  }
+
+  hide() {  
+    if (this.wrapper) {
+      this.wrapper.style.display = 'none';
+      this.editor.keyHandler.endInteraction('context-menu');
+    }
+  }
+
+  positionMenu(x, y) {
+    const padding = 0;
+
+    // Default position
+    let left = x - 15;
+    let top = y - 10;
+
+    const rect = this.wrapper.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    if (top + rect.height + padding > vh) {
+      top = vh - rect.height - padding;
+    }
+
+    if (left + rect.width + padding > vw) {
+      left = vw - rect.width - padding;
+    }
+
+    top = Math.max(padding, top);
+    left = Math.max(padding, left);
+
+    this.wrapper.style.left = `${left}px`;
+    this.wrapper.style.top = `${top}px`;
+  }
+}

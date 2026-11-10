@@ -1,0 +1,174 @@
+import * as THREE from 'three';
+import { SeamSnapshot } from '../uv/SeamSnapshot.js';
+import { SharpSnapshot } from '../uv/SharpSnapshot.js';
+
+export class SeparateSelectionCommand {
+  static type = 'SeparateSelectionCommand';
+
+  /**
+   * @param {Editor} editor
+   * @param {THREE.Object3D|null} object
+   * @param {object|null} beforeSnapshot
+   * @param {object|null} afterSnapshot
+   * @param {object|null} newMeshData
+   * @param {{before?: Set|Array, after?: Set|Array, separated?: Set|Array}} [seams]
+   * @param {{before?: Set|Array, after?: Set|Array, separated?: Set|Array}} [sharps]
+   * @constructor
+   */
+  constructor(editor, object, beforeSnapshot, afterSnapshot, newMeshData, seams = {}, sharps = {}) {
+    this.editor = editor;
+    this.name = 'Separate Selection';
+    this.signals = editor.signals;
+    this.vertexEditor = editor.vertexEditor;
+
+    this.objectUuid = object ? object.uuid : null;
+
+    this.beforeSnapshot = beforeSnapshot ?? null;
+    this.afterSnapshot = afterSnapshot ?? null;
+    this.newMeshData = newMeshData ?? null;
+
+    this.beforeSeam = seams.before ? Array.from(seams.before) : [];
+    this.afterSeam = seams.after ? Array.from(seams.after) : [];
+    this.separatedSeam = seams.separated ? Array.from(seams.separated) : [];
+
+    this.beforeSharp = sharps.before ? Array.from(sharps.before) : [];
+    this.afterSharp = sharps.after ? Array.from(sharps.after) : [];
+    this.separatedSharp = sharps.separated ? Array.from(sharps.separated) : [];
+
+    // Edit selection snapshots ({ vertexIds, edgeIds, faceIds }); null → cleared.
+    this.beforeSelection = null;
+    this.afterSelection = null;
+
+    if (!object) return;
+    this.parentUuid = object.parent ? object.parent.uuid : null;
+    this.index = object.parent ? object.parent.children.indexOf(object) : -1;
+    this.newObjectUuid = null;
+  }
+
+  /** Same contract as MeshDeltaCommand.setSelectionStates. Returns this for chaining. */
+  setSelectionStates(beforeSelection, afterSelection) {
+    this.beforeSelection = beforeSelection ? structuredClone(beforeSelection) : null;
+    this.afterSelection = afterSelection ? structuredClone(afterSelection) : null;
+    return this;
+  }
+
+  execute() {
+    this.editor.editSelection.clearSelection();
+
+    this.applyDelta(this.afterSnapshot);
+
+    const object = this.editor.objectByUuid(this.objectUuid);
+    if (!object || !this.newMeshData) return;
+
+    SeamSnapshot.write(object, this.afterSeam);
+    this.signals.seamsChanged.dispatch(object);
+
+    SharpSnapshot.write(object, this.afterSharp);
+    this.signals.sharpsChanged.dispatch(object)
+
+    const newObject = this.editor.objectEditor.cloneObjectFromMeshData(this.newMeshData, object, {
+      seam: this.separatedSeam,
+      sharp: this.separatedSharp,
+    });
+
+    if (!this.newObjectUuid) {
+      this.newObjectUuid = newObject.uuid;
+    } else {
+      newObject.uuid = this.newObjectUuid;
+    }
+
+    const parent = this.editor.objectByUuid(this.parentUuid);
+    this.editor.sceneManager.addObject(newObject, parent, this.index);
+
+    this.restoreSelection(object, this.afterSelection);
+    this.editor.toolbar.updateTools();
+  }
+
+  undo() {
+    this.editor.editSelection.clearSelection();
+
+    this.applyDelta(this.beforeSnapshot);
+
+    const object = this.editor.objectByUuid(this.objectUuid);
+    if (object) {
+      SeamSnapshot.write(object, this.beforeSeam);
+      this.signals.seamsChanged.dispatch(object);
+
+      SharpSnapshot.write(object, this.beforeSharp);
+      this.signals.sharpsChanged.dispatch(object)
+    }
+
+    const newObject = this.editor.objectByUuid(this.newObjectUuid);
+    if (newObject) {
+      this.editor.sceneManager.detachObject(newObject);
+      this.editor.sceneManager.removeObject(newObject);
+    }
+
+    this.restoreSelection(object, this.beforeSelection);
+    this.editor.toolbar.updateTools();
+  }
+
+  restoreSelection(object, selection) {
+    const editSelection = this.editor.editSelection;
+    if (!object || !selection || editSelection.editedObject !== object) return;
+
+    editSelection.setSelection(selection);
+  }
+
+  applyDelta(delta) {
+    const object = this.editor.objectByUuid(this.objectUuid);
+    if (!object || !delta) return;
+
+    this.vertexEditor.setObject(object);
+    this.vertexEditor.applyDelta(delta);
+  }
+
+  toJSON() {
+    return {
+      type: SeparateSelectionCommand.type,
+      objectUuid: this.objectUuid,
+      beforeSnapshot: this.beforeSnapshot,
+      afterSnapshot: this.afterSnapshot,
+      newMeshData: this.newMeshData,
+      parentUuid: this.parentUuid,
+      index: this.index,
+      newObjectUuid: this.newObjectUuid,
+      beforeSeam: this.beforeSeam,
+      afterSeam: this.afterSeam,
+      separatedSeam: this.separatedSeam,
+      beforeSharp: this.beforeSharp,
+      afterSharp: this.afterSharp,
+      separatedSharp: this.separatedSharp,
+      beforeSelection: this.beforeSelection,
+      afterSelection: this.afterSelection
+    };
+  }
+
+  static fromJSON(editor, json) {
+    if (!json || json.type !== SeparateSelectionCommand.type) return null;
+
+    const seams = {
+      before: json.beforeSeam,
+      after: json.afterSeam,
+      separated: json.separatedSeam
+    };
+
+    const sharps = {
+      before: json.beforeSharp,
+      after: json.afterSharp,
+      separated: json.separatedSharp
+    };
+
+    const cmd = new SeparateSelectionCommand(
+      editor, null, json.beforeSnapshot, json.afterSnapshot, json.newMeshData, seams, sharps
+    );
+    cmd.objectUuid = json.objectUuid;
+    cmd.parentUuid = json.parentUuid;
+    cmd.index = json.index;
+    cmd.newObjectUuid = json.newObjectUuid;
+    cmd.beforeSelection = json.beforeSelection ?? null;
+    cmd.afterSelection = json.afterSelection ?? null;
+
+    return cmd;
+  }
+}

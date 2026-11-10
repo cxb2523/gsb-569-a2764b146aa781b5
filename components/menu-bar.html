@@ -1,0 +1,144 @@
+<div class="menu-bar">
+  <ul>
+    <li class="menu-item">File
+      <ul class="submenu">
+        <li class="submenu-item">
+          New <span class="arrow">&#9656;</span>
+          <ul class="submenu right">
+            <li data-new="empty">Empty</li>
+            <li class="divider"></li>
+            <li data-new="cube">Cube</li>
+            <li data-new="torus">Torus</li>
+            <li data-new="camera">Camera</li>
+          </ul>
+        </li>
+        <li class="open">Open</li>
+        <li class="local-save">Local Save</li>
+        <li class="divider"></li>
+        <li class="import">Import</li>
+        <li class="submenu-item">
+          Export Mesh <span class="arrow">&#9656;</span>
+          <ul class="submenu right">
+            <li data-export="glb">GLB</li>
+            <li data-export="gltf">GLTF</li>
+            <li data-export="obj">OBJ</li>
+            <li data-export="stl">STL</li>
+            <li data-export="stl-binary">STL (BINARY)</li>
+            <li data-export="usdz">USDZ</li>
+          </ul>
+        </li>
+        <li class="export-textures">Export Textures</li>
+      </ul>
+    </li>
+    <li class="menu-item">Edit
+      <ul class="submenu">
+        <li class="undo">Undo
+          <span class="shortcut" data-shortcut-key="undo"></span>
+        </li>
+        <li class="redo">Redo
+          <span class="shortcut" data-shortcut-key="redo"></span>
+        </li>
+      </ul>
+    </li>
+    <li class="menu-item">Add
+      <ul class="submenu">
+        <li class="submenu-item">
+          Mesh <span class="arrow">&#9656;</span>
+          <ul class="submenu right">
+            <li data-geometry="Plane">Plane</li>
+            <li data-geometry="Cube">Cube</li>
+            <li data-geometry="Circle">Circle</li>
+            <li data-geometry="Sphere">Sphere</li>
+            <li data-geometry="Cylinder">Cylinder</li>
+            <li data-geometry="Cone">Cone</li>
+            <li data-geometry="Torus">Torus</li>
+          </ul>
+        </li>
+        <li class="submenu-item">
+          Light <span class="arrow">&#9656;</span>
+          <ul class="submenu right">
+            <li data-light="Ambient">Ambient</li>
+            <li data-light="Directional">Directional</li>
+            <li data-light="Hemisphere">Hemisphere</li>
+            <li data-light="Point">Point</li>
+            <li data-light="Spot">Spot</li>
+          </ul>
+        </li>
+        <li class="submenu-item">
+          Camera <span class="arrow">&#9656;</span>
+          <ul class="submenu right">
+            <li data-camera="Orthographic">Orthographic</li>
+            <li data-camera="Perspective">Perspective</li>
+          </ul>
+        </li>
+        <li class="divider"></li>
+        <li data-group="Group">Group</li>
+        <li data-image="Image">Image</li>
+      </ul>
+    </li>
+    <li class="menu-item">View
+      <ul class="submenu">
+        <li class="toggle-item checked" onclick="toggleCheck(this)">
+          <span class="tick"></span>
+          <span class="label">Grid Helper</span>
+        </li>
+        <li class="toggle-item checked" onclick="toggleCheck(this)">
+          <span class="tick"></span>
+          <span class="label">Camera Helpers</span>
+        </li>
+        <li class="toggle-item checked" onclick="toggleCheck(this)">
+          <span class="tick"></span>
+          <span class="label">Light Helpers</span>
+        </li>
+        <li class="toggle-item checked" onclick="toggleCheck(this)">
+          <span class="tick"></span>
+          <span class="label">Skeleton Helpers</span>
+        </li>
+        <li class="divider"></li>
+        <li class="focus-selected">Focus Selected
+          <span class="shortcut" data-shortcut-key="focusSelected"></span>
+        </li>
+        <li class="focus-origin">Focus Origin
+          <span class="shortcut" data-shortcut-key="focusOrigin"></span>
+        </li>
+        <li class="divider"></li>
+        <li class="fullscreen">Fullscreen</li>
+      </ul>
+    </li>
+    <li class="menu-item">Help
+      <ul class="submenu">
+        <li class="about">About</li>
+        <li class="manual">Manual</li>
+        <li class="features">Features</li>
+        <li class="pricing">Pricing</li>
+        <li class="divider"></li>
+        <li class="sourcecode">Source Code</li>
+        <li class="report">Report a Bug</li>
+        <li class="divider"></li>
+        <li class="terms">Terms & Conditions</li>
+      </ul>
+    </li>
+  </ul>
+
+  <div class="account-slot">
+    <div class="agent-button">
+      <img src="assets/icons/owl.svg" class="agent-icon" width="16" height="16">
+      <span class="label">Agents</span>
+    </div>
+
+    <div class="cloud-save-button">
+      <img src="assets/icons/cloud-save.svg" class="cloud-icon" width="16" height="16">
+      <span class="label">Save</span>
+    </div>
+
+    <div class="login-button">
+      <img src="assets/icons/star.svg" class="star" width="16" height="16">
+      <span class="label">Log In</span>
+    </div>
+
+    <div class="account-button hidden">
+      <img src="assets/icons/star.svg" class="star" width="16" height="16">
+      <span class="label">Account</span>
+    </div>
+  </div>
+</div>

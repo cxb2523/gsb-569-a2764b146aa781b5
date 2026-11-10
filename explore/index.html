@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Explore – Kokraf</title>
+
+  <!-- Meta Description -->
+  <meta name="description" content="Explore projects from artists around the world and collaborate on Kokraf." />
+
+  <!-- Favicon and App Name -->
+  <meta name="application-name" content="Kokraf" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon_io/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon_io/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon_io/favicon-16x16.png">
+  <link rel="icon" href="/assets/favicon_io/favicon.ico" type="image/x-icon">
+  <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon_io/android-chrome-192x192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/assets/favicon_io/android-chrome-512x512.png">
+  <link rel="manifest" href="/assets/favicon_io/site.webmanifest">
+
+  <link rel="stylesheet" href="/css/base-pages.css" />
+  <link rel="stylesheet" href="./explore-page.css" />
+  <link rel="stylesheet" href="/css/login-panel.css" />
+  <link rel="stylesheet" href="/css/account-panel.css" />
+  <link rel="stylesheet" href="/css/viewer-panel.css" />
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.176.0/build/three.module.js",
+        "supabase": "https://esm.sh/@supabase/supabase-js@2"
+      }
+    }
+  </script>
+</head>
+
+<body>
+  <header class="app-header">
+    <div class="header-left">
+      <a href="/" class="logo-link">
+        <img src="../assets/images/KokrafLogo.png" class="logo" />
+      </a>
+      <a href="/projects" class="secondary-btn">
+        <img src="/assets/icons/projects.svg" class="button-icon" width="16" height="16">
+        Projects
+      </a>
+      <a href="/explore" class="secondary-btn active">
+        <img src="/assets/icons/explore.svg" class="explore-icon button-icon" width="16" height="16">
+        Explore
+      </a>
+    </div>
+
+    <div class="header-center">
+      <div class="search-bar">
+        <img src="/assets/icons/search.svg" class="search-icon" width="15" height="15" />
+        <input type="text" id="project-search" class="search-input" placeholder="Search projects" />
+      </div>
+    </div>
+
+    <div class="header-right">
+      <button id="new-project-btn" class="primary-btn">+ New Project</button>
+      <button id="account-btn" class="secondary-btn">Account</button>
+    </div>
+  </header>
+
+  <main class="projects-container">
+    <div id="projects-grid" class="projects-grid"></div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-left">
+      © 2026 Kokraf. All rights reserved.
+    </div>
+    <div class="footer-right">
+      <a href="/terms">Terms of Service</a>
+    </div>
+  </footer>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

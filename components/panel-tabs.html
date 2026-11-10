@@ -1,0 +1,117 @@
+<div class="right-panel">
+  <div class="panel-tabs">
+    <button class="tab active">SCENE</button>
+    <button class="tab">RENDER</button>
+    <button class="tab">SETTINGS</button>
+    <button class="tab" data-tab="agent" hidden>AGENTS</button>
+  </div>
+
+  <div class="panel-content" id="scene-tab">
+    <ul class="outliner-list" id="outliner-list">
+      <li draggable="true" class="outliner-item">• Light</li>
+      <li draggable="true" class="outliner-item">• Group</li>
+      <li draggable="true" class="outliner-item">• Camera</li>
+    </ul>
+    <div class="outliner-resizer" id="outliner-resizer"></div>
+    <div id="details-panel-container"></div>
+  </div>
+
+  <div class="panel-content" id="project-tab" style="display: none;">
+    <ul class="project-settings-list">
+      <li class="setting-option">
+        <span class="label">Antialias</span>
+        <input type="checkbox" id="antialias" checked />
+      </li>
+      <li class="setting-option">
+        <span class="label">Shadows</span>
+        <input type="checkbox" id="shadows" checked />
+        <select id="shadows-options" name="shadows-options">
+          <option value="0">BASIC</option>
+          <option value="1">PCF</option>
+          <option value="2">PCF SOFT</option>
+        </select>
+      </li>
+      <li class="setting-option">
+        <span class="label">Tonemapping</span>
+        <select id="tonemapping-options" name="tonemapping-options">
+          <option value="0">NO</option>
+          <option value="1">LINEAR</option>
+          <option value="2">REINHARD</option>
+          <option value="3">CINEON</option>
+          <option value="4">ACES FILMIC</option>
+          <option value="5">AGX</option>
+          <option value="6">NEUTRAL</option>
+        </select>
+      </li>
+      <li class="setting-option">
+        <span class="label">HDRI</span>
+        <input type="checkbox" id="hdri" checked />
+      </li>
+    </ul>
+    <div class="panel-divider"></div>
+    <ul class="project-settings-list">
+      <li class="setting-option">
+        <span class="label">IMAGE</span>
+      </li>
+      <li class="setting-option">
+        <span class="label">Shading</span>
+        <select id="shading-options" name="shading-options">
+          <option value="solid">SOLID</option>
+          <option value="realistic">REALISTIC</option>
+        </select>
+      </li>
+      <li class="setting-option" id="samples-setting">
+        <span class="label">Samples</span>
+        <input class="number" id="pathtracerSamples" type="number" min="1" max="10000" step="1" value="16" onclick="this.select()" onkeydown="handleEnter(event, this)" style="width: 150px;" />
+      </li>
+      <li class="setting-option">
+        <span class="label">Resolution</span>
+        <input class="number" id="image-width" type="number" min="1" max="10000" step="1" value="1024" onclick="this.select()" onkeydown="handleEnter(event, this)" />
+        <span>&times;</span>
+        <input class="number" id="image-height" type="number" min="1" max="10000" step="1" value="1024" onclick="this.select()" onkeydown="handleEnter(event, this)" />
+      </li>
+      <li class="setting-option">
+        <span class="label"></span> 
+        <button class="action-button" id="image-render-button">RENDER</button>
+      </li>
+    </ul>
+  </div>
+
+  <div class="panel-content" id="settings-tab" style="display: none;">
+    <ul class="project-settings-list">
+      <li class="setting-option">
+        <span class="label">SHORTCUTS</span>
+        <button class="action-button" id="restore-shortcuts-btn" style="display: none;">RESTORE</button>
+      </li>
+
+      <div class="shortcuts-scroll">
+        <ul class="project-settings-list" id="shortcuts-list" style="padding-top: 0;">
+        </ul>
+      </div>
+
+      <li class="setting-option" id="shortcut-error" style="display: none; justify-content: center;">
+        <span class="shortcut-error-msg"></span>
+      </li>
+    </ul>
+    
+    <div class="panel-divider"></div>
+
+    <ul class="project-settings-list">
+      <li class="setting-option" >
+        <span class="label">HISTORY</span>
+
+        <div class="setting-right">
+          <input type="checkbox" id="persistent" />
+          <span class="label" style="min-width: 0px; margin: 3px;">Persistent</span>
+        <div>
+      </li>
+      <ul class="outliner-list" id="history-list" style="height: 200px; margin: 5px 1px">
+      </ul>
+      <li class="setting-option">
+        <button class="action-button" id="clear-button" style="width: 60px;">CLEAR</button>
+      </li>
+    </ul>
+  </div>
+
+  <div class="panel-content" id="agent-tab" style="display: none;"></div>
+</div>

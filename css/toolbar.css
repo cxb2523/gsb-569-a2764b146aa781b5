@@ -1,0 +1,140 @@
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: 70px;
+  left: 10px;
+  z-index: 9;
+  max-height: calc(100vh - 90px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
+}
+
+.toolbar::-webkit-scrollbar {
+  width: 6px;
+}
+.toolbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.toolbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+}
+
+.toolbar-button img {
+  width: 17px;
+  height: 17px;
+  object-fit: contain;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.toolbar-button {
+  width: 32px;
+  height: 32px;
+  padding: 0px;
+  position: relative;
+  border: none;
+  cursor: pointer;
+  background-color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s, box-shadow 0.15s;
+}
+
+.toolbar-button:hover img,
+.toolbar-button.active img {
+  opacity: 0.7;
+}
+
+.toolbar-button:hover {
+  background-color: #f8f8f8;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.toolbar-button.active {
+  background-color: #ddd;
+}
+
+.toolbar-button::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  font-size: 14px;
+  transform: translate(8px, -50%);
+
+  background: #ffffff;
+  color: #222;
+  padding: 4px 8px;
+  border-radius: 2px;
+  white-space: nowrap;
+
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease-out;
+}
+
+.toolbar-button[data-shortcut]::after {
+  content: attr(data-tooltip) " (" attr(data-shortcut) ")";
+}
+
+.toolbar-button:hover::after {
+  opacity: 1;
+}
+
+.toolbar-spacer {
+  height: 8px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.toolbar-button[data-tool="extrude"] img,
+.toolbar-button[data-tool="loopcut"] img,
+.toolbar-button[data-tool="knife"] img,
+.toolbar-button[data-tool="inset"] img,
+.toolbar-button[data-tool="paint"] img,
+.toolbar-button[data-tool="erase"] img,
+.toolbar-button[data-tool="fill"] img {
+  width: 20px;
+  height: 20px;
+}
+
+.default-tools,
+.mesh-tools,
+.operation-tools,
+.paint-tools {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.default-tools.hidden,
+.mesh-tools.hidden,
+.operation-tools.hidden,
+.paint-tools.hidden {
+  display: none;
+}
+
+.floating-tooltip {
+  font-family: sans-serif;
+  position: fixed;
+  font-size: 14px;
+  background: #ffffff;
+  color: #222;
+  padding: 4px 8px;
+  border-radius: 2px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease-out;
+  z-index: 1000;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+.floating-tooltip.visible {
+  opacity: 1;
+}

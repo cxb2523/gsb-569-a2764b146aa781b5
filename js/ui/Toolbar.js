@@ -1,0 +1,318 @@
+import { ObjectTransformTool } from '../tools/ObjectTransformTool.js';
+import { EditTransformTool } from '../tools/EditTransformTool.js';
+import { ExtrudeTool } from '../tools/ExtrudeTool.js';
+import { LoopCutTool } from '../tools/LoopCutTool.js';
+import { KnifeTool } from '../tools/KnifeTool.js';
+import { DuplicateTool } from '../tools/DuplicateTool.js';
+import { BevelTool } from '../tools/BevelTool.js';
+import { InsetTool } from '../tools/InsetTool.js';
+import { EdgeSlideTool } from '../tools/EdgeSlideTool.js';
+import { UnionTool } from '../tools/UnionTool.js';
+import { DifferenceTool } from '../tools/DifferenceTool.js';
+import { IntersectTool } from '../tools/IntersectTool.js';
+
+export default class Toolbar {
+  constructor( editor ) {
+    this.editor = editor;
+    this.signals = editor.signals;
+    this.uiLoader = editor.uiLoader;
+    this.canvas = document.getElementById('three-canvas');
+    this.renderer = editor.renderer;
+    this.selection = editor.selection;
+    this.editSelection = editor.editSelection;
+    this.modeManager = editor.modeManager;
+    this.activeToolObjectMode = 'select';
+    this.activeToolEditMode = 'select';
+    this.activeToolPaintMode = 'paint';
+    this.currentMode = 'object';
+    this.isTransformDragging = false;
+    this.previousToolObjectMode = 'select';
+    this.previousToolEditMode = 'select';
+    this.previousToolUVMode = 'select';
+    this.previousToolPaintMode = 'paint';
+
+    this.objectMoveTool   = new ObjectTransformTool(this.editor, 'translate');
+    this.objectRotateTool = new ObjectTransformTool(this.editor, 'rotate');
+    this.objectScaleTool  = new ObjectTransformTool(this.editor, 'scale');
+
+    this.editMoveTool   = new EditTransformTool(this.editor, 'translate');
+    this.editRotateTool = new EditTransformTool(this.editor, 'rotate');
+    this.editScaleTool  = new EditTransformTool(this.editor, 'scale');
+
+    this.extrudeTool = new ExtrudeTool(this.editor);
+    this.loopCutTool = new LoopCutTool(this.editor);
+    this.knifeTool = new KnifeTool(this.editor);
+    this.duplicateTool = new DuplicateTool(this.editor);
+    this.bevelTool = new BevelTool(this.editor);
+    this.insetTool = new InsetTool(this.editor);
+    this.edgeSlideTool = new EdgeSlideTool(this.editor);
+    this.unionTool = new UnionTool(this.editor);
+    this.differenceTool = new DifferenceTool(this.editor);
+    this.intersectTool = new IntersectTool(this.editor);
+
+    this.ready = this.load();
+  }
+
+  async load() {
+    await this.uiLoader.loadComponent('#toolbar-container', 'components/toolbar.html');
+    this.buttons = document.querySelectorAll('.toolbar-button');
+    this.setupToolbarButtons();
+    this.setupListeners();
+
+    this.currentMode = this.modeManager.currentMode;
+    this.updateTools();
+
+    if (this.defaultToolContainer) {
+      this.defaultToolContainer.classList.toggle('hidden', this.currentMode === 'uv' || this.currentMode === 'paint');
+    }
+
+    if (this.operationToolContainer) {
+      this.operationToolContainer.classList.toggle('hidden', this.currentMode === 'edit' || this.currentMode === 'uv' || this.currentMode === 'paint');
+    }
+    
+    if (this.meshToolContainer) {
+      this.meshToolContainer.classList.toggle('hidden', this.currentMode === 'object' || this.currentMode === 'uv' || this.currentMode === 'paint');
+    }
+
+    if (this.paintToolContainer) {
+      this.paintToolContainer.classList.toggle('hidden', this.currentMode == 'object' || this.currentMode === 'edit' || this.currentMode === 'uv');
+    }
+  }
+
+  setupListeners() {
+    this.signals.modeChanged.add((newMode) => {
+      this.currentMode = newMode;
+      this.updateTools();
+
+      if (this.defaultToolContainer) {
+        this.defaultToolContainer.classList.toggle('hidden', newMode === 'uv' || newMode === 'paint');
+      }
+
+      if (this.operationToolContainer) {
+        this.operationToolContainer.classList.toggle('hidden', newMode === 'edit' || newMode === 'uv' || newMode === 'paint');
+      }
+
+      if (this.meshToolContainer) {
+        this.meshToolContainer.classList.toggle('hidden', newMode === 'object' || newMode === 'uv' || newMode === 'paint');
+      }
+
+      if (this.paintToolContainer) {
+        this.paintToolContainer.classList.toggle('hidden', this.currentMode == 'object' || this.currentMode === 'edit' || this.currentMode === 'uv')
+      }
+    });
+
+    this.signals.emptyScene.add(() => {
+      this.disableTools();
+    });
+
+    this.signals.transformDragStarted.add(() => {
+      this.isTransformDragging = true;
+    });
+
+    this.signals.transformDragEnded.add(() => {
+      this.isTransformDragging = false;
+    });
+
+    const onSelectionUpdate = () => {
+      if (this.isTransformDragging) return;
+
+      const activeTool = this.getActiveTool();
+      if (['move', 'rotate', 'scale', 'extrude', 'bevel', 'inset', 'edge-slide'].includes(activeTool)) {
+        this.updateTools();
+      }
+    };
+
+    this.signals.onToolEnded.add(() => {
+      this.restorePreviousTool();
+    });
+
+    this.signals.editSelectionChanged.add(onSelectionUpdate);
+    this.signals.editSelectionCleared.add(onSelectionUpdate);
+    this.signals.objectSelected.add(onSelectionUpdate);
+    this.signals.subSelectionModeChanged.add(onSelectionUpdate);
+  }
+
+  setupToolbarButtons() {
+    this.defaultToolContainer = document.querySelector('.default-tools');
+    this.operationToolContainer = document.querySelector('.operation-tools');
+    this.meshToolContainer = document.querySelector('.mesh-tools');
+    this.paintToolContainer = document.querySelector('.paint-tools');
+
+    this.tooltipEl = document.createElement('div');
+    this.tooltipEl.className = 'floating-tooltip';
+    document.body.appendChild(this.tooltipEl);
+
+    this.buttons.forEach(button => {
+      button.addEventListener('click', () => {
+        const toolName = button.getAttribute('data-tool');
+        this.setActiveTool(toolName);
+
+        if (this.currentMode === 'object') {
+          this.previousToolObjectMode = toolName;
+        } else if (this.currentMode === 'edit') {
+          this.previousToolEditMode = toolName;
+        } else if (this.currentMode === 'paint') {
+          this.previousToolPaintMode = toolName;
+        }
+      });
+
+      button.addEventListener('mouseenter', () => this.showTooltip(button));
+      button.addEventListener('mouseleave', () => this.hideTooltip());
+    });
+
+    document.querySelector('.toolbar')?.addEventListener('scroll', () => this.hideTooltip());
+  }
+
+  getActiveTool() {
+    if (this.currentMode === 'object') return this.activeToolObjectMode;
+    if (this.currentMode === 'edit') return this.activeToolEditMode;
+    if (this.currentMode === 'paint') return this.activeToolPaintMode;
+  }
+
+  setActiveTool(toolName) {
+    const current = this.getActiveTool();
+    if (current === toolName) return;
+
+    if (this.currentMode === 'object') {
+      this.activeToolObjectMode = toolName;
+    } else if (this.currentMode === 'edit') {
+      this.activeToolEditMode = toolName;
+    } else if (this.currentMode === 'paint') {
+      this.activeToolPaintMode = toolName;
+    }
+    this.updateTools();
+    this.signals.toolChanged.dispatch(toolName);
+  }
+
+  restorePreviousTool() {
+    if (this.toolsDisabled) return;
+    
+    if (['union', 'difference', 'intersect'].includes(this.activeToolObjectMode)) {
+      this.previousToolObjectMode = 'select';
+    }
+    
+    if (this.currentMode === 'object') {
+      if (this.previousToolObjectMode) {
+        this.activeToolObjectMode = this.previousToolObjectMode;
+      }
+    } else if (this.currentMode === 'edit') {
+      if (this.previousToolEditMode) {
+        this.activeToolEditMode = this.previousToolEditMode;
+      }
+    } else if (this.currentMode === 'uv') {
+      if (this.previousToolUVMode) {
+        this.activeToolUVMode = this.previousToolUVMode;
+      }
+    } else if (this.currentMode === 'paint') {
+      if (this.previousToolPaintMode) {
+        this.activeToolPaintMode = this.previousToolPaintMode;
+      }
+    }
+
+    this.updateTools();
+  }
+
+  updateTools() {
+    let activeTool = this.getActiveTool();
+    let attachObject = null;
+
+    if (this.currentMode === 'object') {
+      this.selection.updatePivotHandle();
+      attachObject = this.selection.pivotHandle;
+    } else if (this.currentMode === 'edit' || this.currentMode === 'uv' || this.currentMode === 'paint') {
+      this.editSelection.updateVertexHandle();
+      attachObject = this.editSelection.vertexHandle;
+    }
+    if (!attachObject.visible) attachObject = null;
+
+    this.updateActiveTools(activeTool, attachObject);
+    this.buttons?.forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-tool') === activeTool);
+    });
+  }
+
+  disableTools() {
+    this.toolsDisabled = true;
+
+    this.objectMoveTool.disable();
+    this.objectRotateTool.disable();
+    this.objectScaleTool.disable();
+
+    this.editMoveTool.disable();
+    this.editRotateTool.disable();
+    this.editScaleTool.disable();
+
+    this.extrudeTool.disable();
+    this.loopCutTool.disable();
+    this.knifeTool.disable();
+    this.bevelTool.disable();
+    this.insetTool.disable();
+    this.edgeSlideTool.disable();
+    this.unionTool.disable();
+    this.differenceTool.disable();
+    this.intersectTool.disable();
+
+    this.toolsDisabled = false;
+  }
+
+  updateActiveTools(activeTool, attachObject) {
+    this.disableTools();
+    const isObjectMode = this.currentMode === 'object';
+
+    // Disable selection for some tools
+    if (this.currentMode === 'object') {
+      this.editSelection.enable = false;
+    } else if (this.currentMode === 'edit') {
+      this.editSelection.enable = !['loopcut', 'knife'].includes(activeTool);
+    } else if (this.currentMode === 'paint') {
+      this.editSelection.enable = false;
+    }
+
+    switch (activeTool) {
+      case 'move':
+        isObjectMode ? this.objectMoveTool.enableFor(attachObject) : this.editMoveTool.enableFor(attachObject);
+        break;
+        
+      case 'rotate':
+        isObjectMode ? this.objectRotateTool.enableFor(attachObject) : this.editRotateTool.enableFor(attachObject);
+        break;
+
+      case 'scale':
+        isObjectMode ? this.objectScaleTool.enableFor(attachObject) : this.editScaleTool.enableFor(attachObject);
+        break;
+      
+      case 'extrude' : this.extrudeTool.enableFor(attachObject); break;
+      case 'loopcut' : this.loopCutTool.enable(); break;
+      case 'knife' : this.knifeTool.enable(); break;
+      case 'bevel' : this.bevelTool.enableFor(attachObject); break;
+      case 'inset' : this.insetTool.enableFor(attachObject); break;
+      case 'edge-slide' : this.edgeSlideTool.enableFor(attachObject); break;      
+      case 'union' : this.unionTool.enable(); break;
+      case 'difference' : this.differenceTool.enable(); break;
+      case 'intersect' : this.intersectTool.enable(); break;
+
+      case 'paint':  this.signals.setPaintTool.dispatch('paint'); break;
+      case 'erase': this.signals.setPaintTool.dispatch('erase'); break;
+      case 'fill': this.signals.setPaintTool.dispatch('fill'); break;
+    }
+  }
+
+  showTooltip(button) {
+    const label = button.getAttribute('data-tooltip');
+    const shortcut = button.getAttribute('data-shortcut');
+    this.tooltipEl.textContent = shortcut ? `${label} (${shortcut})` : label;
+
+    const rect = button.getBoundingClientRect();
+    const top = rect.top + rect.height / 2;
+    const left = rect.right + 8;
+
+    this.tooltipEl.style.top = `${top}px`;
+    this.tooltipEl.style.left = `${left}px`;
+    this.tooltipEl.style.transform = 'translateY(-50%)';
+    this.tooltipEl.classList.add('visible');
+  }
+
+  hideTooltip() {
+    this.tooltipEl.classList.remove('visible');
+  }
+}

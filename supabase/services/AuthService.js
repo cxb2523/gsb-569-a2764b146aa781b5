@@ -1,0 +1,85 @@
+import { supabase } from '../supabase.js';
+import { Signal } from '../../js/utils/Signals.js';
+
+class AuthService {
+  constructor() {
+    this.user = null;
+
+    this.signals = {
+      login: new Signal(),
+      logout: new Signal()
+    };
+    this._ready = new Promise(resolve => { this._resolveReady = resolve; });
+
+    this.init();
+  }
+
+  async init() {
+    const { data: { session } } = await supabase.auth.getSession();
+    this.user = session?.user || null;
+
+    // Clean OAuth hash
+    if (window.location.href.endsWith('#')) {
+      history.replaceState(null, '', window.location.href.slice(0, -1));
+    }
+
+    this._resolveReady();
+
+    if (this.user) {
+      this.signals.login.dispatch(this.user);
+    }
+
+    supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN') {
+        this.user = session.user;
+        this.signals.login.dispatch(session.user);
+      }
+
+      if (event === 'SIGNED_OUT') {
+        this.user = null;
+        this.signals.logout.dispatch();
+      }
+    });
+  }
+
+  async getSession() {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) {
+      console.error('Failed to get session:', error);
+      return null;
+    }
+    return session;
+  }
+
+  async login(email, password) {
+    return supabase.auth.signInWithPassword({ email, password });
+  }
+
+  async signup(email, password) {
+    return supabase.auth.signUp({ email, password });
+  }
+
+  async logout() {
+    return supabase.auth.signOut();
+  }
+
+  isLoggedIn() {
+    return !!this.user;
+  }
+
+  async loginWithGoogle() {
+    return supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.href
+      }
+    });
+  }
+
+  async waitForUser() {
+    await this._ready;
+    return this.user;
+  }
+}
+
+export const auth = new AuthService();

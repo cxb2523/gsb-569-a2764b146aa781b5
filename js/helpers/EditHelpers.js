@@ -1,0 +1,551 @@
+import * as THREE from 'three';
+import { LineSegmentsGeometry } from 'jsm/lines/LineSegmentsGeometry.js';
+import { LineSegments2 } from 'jsm/lines/LineSegments2.js';
+import earcut from 'earcut';
+import { computePlaneNormal, projectTo2D } from '../geometry/TriangulationUtils.js';
+import { MeshData } from '../core/MeshData.js';
+import { SeamUtils } from '../utils/SeamUtils.js';
+import { SharpUtils } from '../utils/SharpUtils.js';
+import { EdgeLineMaterial } from '../materials/EdgeLineMaterial.js';
+import { VertexPointMaterial } from '../materials/VertexPointMaterial.js';
+
+const EDGE_COLOR_DEFAULT = [0, 0, 0];
+const EDGE_COLOR_SELECTED = [1, 1, 1];
+const EDGE_COLOR_SEAM = [1, 0.05, 0.05];
+const EDGE_COLOR_SELECTED_SEAM = [1, 0.5, 0];
+const EDGE_COLOR_SHARP = [0, 0.75, 1];
+const EDGE_COLOR_SELECTED_SHARP = [0.6, 0.95, 1];
+
+const EDGE_WIDTH_DEFAULT = 1.1;
+const EDGE_WIDTH_MARKED = 1.5;
+
+const EMPTY_SET = new Set();
+
+export default class EditHelpers {
+  constructor(editor) {
+    this.editor = editor;
+    this.signals = editor.signals;
+    this.sceneManager = editor.sceneManager;
+    this.isUVMode = false;
+
+    this.setupListeners();
+  }
+
+  setupListeners() {
+    this.signals.editSelectionChanged.add((allSelectedIds) => {
+      this.applyVertexHighlight(allSelectedIds.selectedVertexIds);
+      this.applyEdgeHighlight(allSelectedIds.selectedEdgeIds);
+      this.applyFaceHighlight(allSelectedIds.selectedFaceIds);
+    });
+
+    this.signals.editSelectionCleared.add(() => {
+      this.clearEditHelpers();
+    });
+
+    this.signals.vertexPositionsUpdated.add((verts, edges, faces, meshData, matrixWorld) => {
+      this.updateHelpersAfterMeshEdit(verts, edges, faces, meshData, matrixWorld);
+    });
+
+    this.signals.refreshEditHelpers.add((editedObject, mode, allSelectedIds) => {
+      this.editedObject = editedObject;
+      this.refreshHelpers(editedObject, mode, allSelectedIds);
+    });
+
+    this.signals.seamsChanged.add(() => {
+      this.applyEdgeHighlight(this.lastSelectedEdgeIds);
+    });
+
+    this.signals.sharpsChanged.add(() => {
+      this.applyEdgeHighlight(this.lastSelectedEdgeIds);
+    })
+
+    this.signals.modeChanged.add((newMode) => {
+      this.isUVMode = newMode === 'uv';
+      this.applyEdgeHighlight(this.lastSelectedEdgeIds);
+    });
+  }
+
+  addVertexPoints(selectedObject) {
+    const meshData = selectedObject.userData.meshData;
+    const positions = [];
+    const colors = [];
+    const vertexIds = [];
+    const vertexIdToBufferIndex = new Map();
+
+    let i = 0;
+    for (let v of meshData.vertices.values()) {
+      positions.push(v.position.x, v.position.y, v.position.z);
+      colors.push(0, 0, 0);
+      vertexIds.push(v.id);
+      vertexIdToBufferIndex.set(v.id, i);
+      i++;
+    }
+    
+    const pointGeometry = new THREE.BufferGeometry();
+    pointGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    pointGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    pointGeometry.setAttribute('vertexId', new THREE.Uint16BufferAttribute(vertexIds, 1));
+
+    const pointMaterial = new VertexPointMaterial();
+
+    const vertexPoints = new THREE.Points(pointGeometry, pointMaterial);
+    vertexPoints.renderOrder = 11;
+    vertexPoints.frustumCulled = false;
+    vertexPoints.userData.isEditorOnly = true;
+    vertexPoints.userData.vertexIdToBufferIndex = vertexIdToBufferIndex;
+    vertexPoints.name = '__VertexPoints';
+    this.sceneManager.sceneHelpers.add(vertexPoints);
+    vertexPoints.matrixAutoUpdate = false;
+    vertexPoints.matrix.copy(selectedObject.matrixWorld);
+
+    return vertexPoints;
+  }
+
+  removeVertexPoints() {
+    const vertexPoints = this.sceneManager.sceneHelpers.getObjectByName('__VertexPoints');
+    if (vertexPoints) {
+      if (vertexPoints.parent) vertexPoints.parent.remove(vertexPoints);
+      if (vertexPoints.geometry) vertexPoints.geometry.dispose();
+      if (vertexPoints.material) vertexPoints.material.dispose();
+    }
+  }
+
+  addEdgeLines(selectedObject) {
+    if (!selectedObject.isMesh || !selectedObject.userData.meshData) return;
+
+    const meshData = selectedObject.userData.meshData;
+    const matrixWorld = selectedObject.matrixWorld;
+
+    const allPositions = [];
+    const edgeIdToBufferIndex = new Map();
+    const edgeIdList = [];
+
+    const v1 = new THREE.Vector3();
+    const v2 = new THREE.Vector3();
+
+    let i = 0;
+    for (let edge of meshData.edges.values()) {
+      v1.copy(meshData.getVertex(edge.v1Id).position).applyMatrix4(matrixWorld);
+      v2.copy(meshData.getVertex(edge.v2Id).position).applyMatrix4(matrixWorld);
+
+      allPositions.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+      edgeIdToBufferIndex.set(edge.id, i);
+      edgeIdList.push(edge.id);
+      i++;
+    }
+
+    const posArray = new Float32Array(allPositions);
+
+    // Visible Line
+    const fatGeo = new LineSegmentsGeometry().setPositions(posArray);
+    const fatMat = new EdgeLineMaterial();
+    fatMat.resolution.set(window.innerWidth, window.innerHeight);
+
+    const instanceColorStart = new THREE.InstancedBufferAttribute(new Float32Array(edgeIdList.length * 3).fill(0), 3);
+    const instanceColorEnd = new THREE.InstancedBufferAttribute(new Float32Array(edgeIdList.length * 3).fill(0), 3);
+    const instanceWidth = new THREE.InstancedBufferAttribute(new Float32Array(edgeIdList.length).fill(EDGE_WIDTH_DEFAULT), 1);
+
+    fatGeo.setAttribute('instanceColorStart', instanceColorStart);
+    fatGeo.setAttribute('instanceColorEnd', instanceColorEnd);
+    fatGeo.setAttribute('instanceWidth', instanceWidth);
+
+    const fatLine = new LineSegments2(fatGeo, fatMat);
+    fatLine.computeLineDistances();
+    fatLine.renderOrder = 10;
+    fatLine.frustumCulled = false;
+    fatLine.userData.isEditorOnly = true;
+    fatLine.userData.edgeIdToBufferIndex = edgeIdToBufferIndex;
+    fatLine.userData.edgeIdList = edgeIdList;
+    fatLine.name = '__EdgeLinesVisual';
+    
+    fatLine.matrixAutoUpdate = true;
+    fatLine.matrix.copy(matrixWorld);
+    this.sceneManager.sceneHelpers.add(fatLine);
+
+    // Invisible Raycast Line
+    const thinGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(posArray, 3));
+    const thinMat = new THREE.LineBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthTest: false
+    });
+
+    const thinLine = new THREE.Line(thinGeo, thinMat);
+    thinLine.frustumCulled = false;
+    thinLine.userData.isEditorOnly = true;
+    thinLine.userData.edgeIdToBufferIndex = edgeIdToBufferIndex;
+    thinLine.userData.edgeIdList = edgeIdList;
+    thinLine.userData.visualLine = fatLine;
+    thinLine.name = '__EdgeLines';
+
+    thinLine.matrixAutoUpdate = true;
+    thinLine.matrix.copy(matrixWorld);
+    this.sceneManager.sceneHelpers.add(thinLine);
+  }
+
+  removeEdgeLines() {
+    const toRemove = [];
+    this.sceneManager.sceneHelpers.traverse((obj) => {
+      if (obj.userData.isEditorOnly && (obj.name === '__EdgeLines' || obj.name === '__EdgeLinesVisual')) {
+        toRemove.push(obj);
+      }
+    });
+
+    for (let obj of toRemove) {
+      if (obj.parent) obj.parent.remove(obj);
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) obj.material.dispose();
+    }
+  }
+
+  addFacePolygons(selectedObject) {
+    const meshData = selectedObject.userData.meshData;
+    const matrixWorld = selectedObject.matrixWorld;
+    const positions = [];
+    const colors = [];
+    const indices = [];
+    const alphas = [];
+
+    const faceIdToRange = new Map();
+    let vertexOffset = 0;
+    let triangleOffset = 0;
+
+    const v = new THREE.Vector3();
+
+    for (let face of meshData.faces.values()) {
+      const verts = face.vertexIds.map(id => {
+        const vertex = meshData.getVertex(id);
+        const position = v.copy(vertex.position).applyMatrix4(matrixWorld);
+
+        return {
+          ...vertex,
+          position: { x: position.x, y: position.y, z: position.z }
+        };
+      });
+      
+      let triangulated = null;
+      let triCount = 0;
+
+      const normal = computePlaneNormal(verts);
+      const flatVertices2D = projectTo2D(verts, normal);
+      triangulated = earcut(flatVertices2D);
+
+      if (triangulated.length > 0) {
+        triCount = triangulated.length / 3;
+      } else {
+        triCount = verts.length - 2;
+      }
+
+      faceIdToRange.set(face.id, {
+        faceId: face.id,
+        start: vertexOffset,
+        count: verts.length,
+        triStart: triangleOffset,
+        triCount: triCount,
+        vertexIds: [...face.vertexIds],
+        edgeIds: [...face.edgeIds]
+      });
+
+      for (let v of verts) {
+        positions.push(v.position.x, v.position.y, v.position.z);
+        colors.push(1, 1, 1);
+        alphas.push(0.0);
+      }
+
+      if (triangulated.length > 0) {
+        for (let i = 0; i < triangulated.length; i += 3) {
+          indices.push(
+            vertexOffset + triangulated[i],
+            vertexOffset + triangulated[i + 1],
+            vertexOffset + triangulated[i + 2]
+          );
+        }
+      } else {
+        for (let i = 1; i < verts.length - 1; i++) {
+          indices.push(vertexOffset, vertexOffset + i, vertexOffset + i + 1);
+        }
+      }
+
+      vertexOffset += verts.length;
+      triangleOffset += triCount;
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setAttribute('alpha', new THREE.Float32BufferAttribute(alphas, 1));
+    geometry.setIndex(indices);
+
+    const material = new THREE.ShaderMaterial({
+      vertexColors: true,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+
+      vertexShader: `
+        attribute float alpha;
+
+        varying vec3 vColor;
+        varying float vAlpha;
+
+        void main() {
+          vColor = color;
+          vAlpha = alpha;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+
+      fragmentShader: `
+        varying vec3 vColor;
+        varying float vAlpha;
+
+        void main() {
+          gl_FragColor = vec4(vColor, vAlpha);
+        }
+      `,
+    });
+
+    const faceMesh = new THREE.Mesh(geometry, material);
+    faceMesh.renderOrder = 5;
+    faceMesh.frustumCulled = false;
+    faceMesh.userData.faceIdToRange = faceIdToRange;
+    faceMesh.userData.isEditorOnly = true;
+    faceMesh.name = '__FacePolygons';
+
+    faceMesh.matrixAutoUpdate = true;
+    faceMesh.matrix.copy(selectedObject.matrixWorld);
+    this.sceneManager.sceneHelpers.add(faceMesh);
+  }
+
+  removeFacePolygons() {
+    const obj = this.sceneManager.sceneHelpers.getObjectByName('__FacePolygons');
+    if (obj) {
+      if (obj.parent) obj.parent.remove(obj);
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) obj.material.dispose();
+    }
+  }
+
+  refreshHelpers(editedObject, mode, allSelectedIds) {
+    if (!editedObject) return;
+
+    if (editedObject.userData.meshData && !(editedObject.userData.meshData instanceof MeshData)) {
+      MeshData.rehydrateMeshData(editedObject);
+    }
+
+    this.removeVertexPoints();
+    this.removeEdgeLines();
+    this.removeFacePolygons();
+
+    const vertexPoints = this.addVertexPoints(editedObject);
+    vertexPoints.visible = mode === 'vertex';
+
+    this.addEdgeLines(editedObject);
+    this.addFacePolygons(editedObject);
+
+    this.applyVertexHighlight(allSelectedIds.selectedVertexIds);
+    this.applyEdgeHighlight(allSelectedIds.selectedEdgeIds);
+    this.applyFaceHighlight(allSelectedIds.selectedFaceIds);
+  }
+
+  updateHelpersAfterMeshEdit(affectedVertices, affectedEdges, affectedFaces, meshData, matrixWorld) {
+    const vertexPoints = this.sceneManager.sceneHelpers.getObjectByName('__VertexPoints');
+    const thinLine = this.sceneManager.sceneHelpers.getObjectByName('__EdgeLines');
+    const fatLine = this.sceneManager.sceneHelpers.getObjectByName('__EdgeLinesVisual');
+    const faceMesh = this.sceneManager.sceneHelpers.getObjectByName('__FacePolygons');
+
+    // Update affected vertices
+    if (vertexPoints) {
+      const posAttr = vertexPoints.geometry.getAttribute('position');
+      const vertexIdToBufferIndex = vertexPoints.userData.vertexIdToBufferIndex;
+
+      for (let vertexId of affectedVertices) {
+        const bufferIndex = vertexIdToBufferIndex.get(vertexId);
+        const v = meshData.getVertex(vertexId);
+        posAttr.setXYZ(bufferIndex, v.position.x, v.position.y, v.position.z);
+      }
+      posAttr.needsUpdate = true;
+    }
+
+    // Update affected edges
+    if (thinLine && fatLine) {
+      const { edgeIdToBufferIndex } = thinLine.userData;
+      const thinPosAttr = thinLine.geometry.getAttribute('position');
+      const fatPosArray = fatLine.geometry.attributes.instanceStart.data.array;
+
+      const v1 = new THREE.Vector3();
+      const v2 = new THREE.Vector3();
+
+      for (let edgeId of affectedEdges) {
+        const edge = meshData.edges.get(edgeId);
+        if (!edge) continue;
+
+        const bufferIndex = edgeIdToBufferIndex.get(edgeId);
+        if (bufferIndex === undefined) continue;
+
+        v1.copy(meshData.getVertex(edge.v1Id).position).applyMatrix4(matrixWorld);
+        v2.copy(meshData.getVertex(edge.v2Id).position).applyMatrix4(matrixWorld);
+
+        thinPosAttr.setXYZ(bufferIndex * 2, v1.x, v1.y, v1.z);
+        thinPosAttr.setXYZ(bufferIndex * 2 + 1, v2.x, v2.y, v2.z);
+
+        const offset = bufferIndex * 6;
+        fatPosArray[offset]     = v1.x; fatPosArray[offset + 1] = v1.y; fatPosArray[offset + 2] = v1.z;
+        fatPosArray[offset + 3] = v2.x; fatPosArray[offset + 4] = v2.y; fatPosArray[offset + 5] = v2.z;
+      }
+
+      thinPosAttr.needsUpdate = true;
+      fatLine.geometry.attributes.instanceStart.data.needsUpdate = true;
+    }
+
+    // Update affected faces
+    if (faceMesh) {
+      const facePosAttr = faceMesh.geometry.getAttribute('position');
+      const faceIdToRange = faceMesh.userData.faceIdToRange;
+
+      const v = new THREE.Vector3();
+
+      for (let faceId of affectedFaces) {
+        const fr = faceIdToRange.get(faceId);
+        if (!fr) continue;
+
+        const { start, vertexIds } = fr;
+        for (let i = 0; i < vertexIds.length; i++) {
+          v.copy(meshData.getVertex(vertexIds[i]).position).applyMatrix4(matrixWorld);
+          facePosAttr.setXYZ(start + i, v.x, v.y, v.z);
+        }
+      }
+
+      facePosAttr.needsUpdate = true;
+    }
+  }
+
+  applyVertexHighlight(selectedVertexIds) {
+    const vertexPoints = this.sceneManager.sceneHelpers.getObjectByName('__VertexPoints');
+    if (!vertexPoints) return;
+
+    const colors = vertexPoints.geometry.getAttribute('color');
+    const indices = vertexPoints.geometry.getAttribute('vertexId');
+
+    for (let i = 0; i < indices.count; i++) {
+      if (selectedVertexIds.has(indices.getX(i))) {
+        colors.setXYZ(i, 1, 1, 1);
+      } else {
+        colors.setXYZ(i, 0, 0, 0);
+      }
+    }
+
+    colors.needsUpdate = true;
+  }
+
+  _getEdgeColor(edgeId, isSelected, seamIds, sharpIds) {
+    if (seamIds?.has(edgeId)) {
+      return isSelected ? EDGE_COLOR_SELECTED_SEAM : EDGE_COLOR_SEAM;
+    }
+    if (sharpIds?.has(edgeId)) {
+      return isSelected ? EDGE_COLOR_SELECTED_SHARP : EDGE_COLOR_SHARP;
+    }
+    return isSelected ? EDGE_COLOR_SELECTED : EDGE_COLOR_DEFAULT;
+  }
+
+  _writeEdgeStyles(fatLine, selectedEdgeIds) {
+    const { edgeIdList, edgeIdToBufferIndex } = fatLine.userData;
+    const sharpIds = SharpUtils.getSharpIds(this.editedObject);
+    const seamIds = this.isUVMode ? SeamUtils.getSeamIds(this.editedObject) : null;
+
+    const colorStart = fatLine.geometry.getAttribute('instanceColorStart');
+    const colorEnd = fatLine.geometry.getAttribute('instanceColorEnd');
+    const width = fatLine.geometry.getAttribute('instanceWidth');
+
+    for (const edgeId of edgeIdList) {
+      const idx = edgeIdToBufferIndex.get(edgeId);
+      if (idx === undefined) continue;
+      
+      const isSelected = selectedEdgeIds.has(edgeId);
+      const c = this._getEdgeColor(edgeId, isSelected, seamIds, sharpIds);
+
+      colorStart.setXYZ(idx, c[0], c[1], c[2]);
+      colorEnd.setXYZ(idx, c[0], c[1], c[2]);
+
+      if (width) {
+        const isMarked = seamIds?.has(edgeId) || sharpIds?.has(edgeId);
+        width.setX(idx, isMarked ? EDGE_WIDTH_MARKED : EDGE_WIDTH_DEFAULT);
+      }
+    }
+
+    colorStart.needsUpdate = true;
+    colorEnd.needsUpdate = true;
+    if (width) width.needsUpdate = true;
+  }
+
+  applyEdgeHighlight(selectedEdgeIds) {
+    const fatLine = this.sceneManager.sceneHelpers.getObjectByName('__EdgeLinesVisual');
+    if (!fatLine) return;
+
+    this.lastSelectedEdgeIds = selectedEdgeIds ?? EMPTY_SET;
+    this._writeEdgeStyles(fatLine, this.lastSelectedEdgeIds);
+  }
+
+  applyFaceHighlight(selectedFaceIds) {
+    const faceMesh = this.sceneManager.sceneHelpers.getObjectByName('__FacePolygons');
+    if (!faceMesh) return;
+
+    const faceIdToRange = faceMesh.userData.faceIdToRange;
+    if (!faceIdToRange) return;
+
+    const colors = faceMesh.geometry.getAttribute('color');
+    const alphas = faceMesh.geometry.getAttribute('alpha');
+
+    for (let fr of faceIdToRange.values()) {
+      const { faceId, start, count } = fr;
+
+      for (let i = 0; i < count; i++) {
+        const idx = start + i;
+
+        if (selectedFaceIds.has(faceId)) {
+          colors.setXYZ(idx, 1, 1, 0);
+          alphas.setX(idx, 0.15);
+        } else {
+          colors.setXYZ(idx, 1, 1, 1);
+          alphas.setX(idx, 0.0);
+        }
+      }
+    }
+
+    colors.needsUpdate = true;
+    alphas.needsUpdate = true;
+  }
+
+  clearEditHelpers() {
+    const vertexPoints = this.sceneManager.sceneHelpers.getObjectByName('__VertexPoints');
+    if (vertexPoints) {
+      const colors = vertexPoints.geometry.attributes.color;
+      for (let i = 0; i < colors.count; i++) {
+        colors.setXYZ(i, 0, 0, 0);
+      }
+      colors.needsUpdate = true;
+    }
+
+    const fatLine = this.sceneManager.sceneHelpers.getObjectByName('__EdgeLinesVisual');
+    if (fatLine) {
+      this._writeEdgeStyles(fatLine, EMPTY_SET);
+    }
+
+    const faceMesh = this.sceneManager.sceneHelpers.getObjectByName('__FacePolygons');
+    if (faceMesh) {
+      const colors = faceMesh.geometry.getAttribute('color');
+      const alphas = faceMesh.geometry.getAttribute('alpha');
+      for (let i = 0; i < colors.count; i++) {
+        colors.setXYZ(i, 1, 1, 1);
+        alphas.setX(i, 0.0);
+      }
+
+      colors.needsUpdate = true;
+      alphas.needsUpdate = true;
+    }
+  }
+}

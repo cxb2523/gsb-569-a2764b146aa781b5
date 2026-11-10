@@ -1,0 +1,618 @@
+import * as THREE from 'three';
+import { getSortedVertexIds } from '../utils/SortUtils.js';
+import { getNeighborFaces, shouldFlipNormal } from '../utils/AlignedNormalUtils.js';
+import { CreateFaceCommand } from '../commands/CreateFaceCommand.js';
+import { DeleteSelectionCommand } from '../commands/DeleteSelectionCommand.js';
+import { SeparateSelectionCommand } from '../commands/SeparateSelectionCommand.js';
+import { MergeSelectionCommand } from '../commands/MergeSelectionCommand.js';
+import { SplitSelectionCommand } from '../commands/SplitSelectionCommand.js';
+import { FlipNormalsCommand } from '../commands/FlipNormalsCommand.js';
+import { SubdivideSelectionCommand } from '../commands/SubdivideSelectionCommand.js';
+import { BridgeSelectionCommand } from '../commands/BridgeSelectionCommand.js';
+import { SetSharpCommand } from '../commands/SetSharpCommand.js';
+import { MeshDataRegion } from '../core/MeshDataRegion.js';
+import { OperatorPanel } from '../panels/OperatorPanel.js';
+import { SeamSnapshot } from '../uv/SeamSnapshot.js';
+import { SeamUtils } from '../utils/SeamUtils.js';
+import { SharpSnapshot } from '../uv/SharpSnapshot.js';
+import { SharpUtils } from '../utils/SharpUtils.js';
+
+export class EditActions {
+  constructor(editor) {
+    this.editor = editor;
+    this.signals = editor.signals;
+    this.meshEditor = editor.meshEditor;
+    this.vertexEditor = editor.vertexEditor;
+    this.editSelection = editor.editSelection;
+
+    const operatorPanelContainer = document.getElementById('operator-panel-container');
+    this.operatorPanel = new OperatorPanel(editor, operatorPanelContainer);
+
+    this.actions = {
+      'subdivide-selection': () => this.signals.subdivideSelection.dispatch(),
+      'duplicate-selection': () => {
+        this.editor.toolbar.setActiveTool('select');
+        this.signals.duplicateSelection.dispatch();
+      },
+      'create-edge-face': () => this.signals.createElementFromVertices.dispatch(),
+      'bridge-selection': () => this.signals.bridgeSelection.dispatch(),
+      'split-selection': () => this.signals.splitSelection.dispatch(),
+      'separate-selection': () => this.signals.separateSelection.dispatch(),
+      'select-all': () => this.signals.editSelectAll.dispatch(),
+      'select-none': () => this.signals.editSelectNone.dispatch(),
+      'select-linked': () => this.signals.editSelectLinked.dispatch(),
+      'select-rings': () => this.signals.editSelectRings.dispatch(),
+      'select-loops': () => this.signals.editSelectLoops.dispatch(),
+      'flip-normals': () => this.signals.editFlipNormals.dispatch(),
+      'mark-sharp': () => this.setSharp(true),
+      'clear-sharp': () => this.setSharp(false),
+    };
+
+    this.prefixActions = [
+      ['merge-', (action) => this.signals.mergeSelection.dispatch(action)],
+      ['delete-', (action) => this.signals.deleteSelectedFaces.dispatch(action)],
+      ['dissolve-', (action) => this.signals.deleteSelectedFaces.dispatch(action)],
+    ];
+
+    this.setupListeners();
+  }
+
+  setupListeners() {
+    this.signals.createElementFromVertices.add(() => this.createElementFromVertices());
+    this.signals.deleteSelectedFaces.add((action) => this.deleteSelected(action));
+    this.signals.separateSelection.add(() => this.separateSelection());
+    this.signals.mergeSelection.add((action) => {
+      if (action === 'merge-by-distance') this.mergeByDistance();
+      else this.mergeSelection(action);
+    });
+    this.signals.splitSelection.add(() => this.splitSelection());
+    this.signals.editFlipNormals.add(() => this.flipSelectedFacesNormal());
+    this.signals.subdivideSelection.add(() => this.subdivideSelection());
+    this.signals.bridgeSelection.add(() => this.bridgeSelection());
+  }
+
+  handleAction(action) {
+    if (!action) return;
+
+    const handler = this.actions[action]
+      ?? this.prefixActions.find(([prefix]) => action.startsWith(prefix))?.[1];
+
+    if (!handler) {
+      console.warn('Invalid action:', action);
+      return;
+    }
+
+    handler(action);
+  }
+
+  createElementFromVertices() {
+    const editedObject = this.editSelection.editedObject;
+    const mode = this.editSelection.subSelectionMode;
+    if (mode === 'face') return null;
+
+    const meshData = editedObject?.userData?.meshData;
+    if (!editedObject || !meshData) return null;
+
+    const selectedVertexIds = Array.from(this.editSelection.selectedVertexIds);
+    const selectedEdgeIds = Array.from(this.editSelection.selectedEdgeIds);
+    const selectedFaceIds = Array.from(this.editSelection.selectedFaceIds);
+    if (selectedVertexIds.length < 1) return null;
+
+    // Prevent creating a face identical to the selected face
+    if (selectedFaceIds.length === 1) {
+      const face = meshData.faces.get(selectedFaceIds[0]);
+      if (face && selectedVertexIds.length === face.vertexIds.length) {
+        return null;
+      }
+    }
+    this.vertexEditor.setObject(editedObject);
+
+    const beforeSelection = this.editSelection.getSnapshot();
+
+    const beforeRegionIds = MeshDataRegion.expand(
+      meshData,
+      { vertexIds: selectedVertexIds, edgeIds: selectedEdgeIds },
+      1
+    );
+    const beforeSnapshot = MeshDataRegion.snapshot(meshData, beforeRegionIds);
+
+    const startElements = {
+      startVertexId: meshData.nextVertexId,
+      startEdgeId: meshData.nextEdgeId,
+      startFaceId: meshData.nextFaceId,
+    };
+
+    let result;
+    let createdFromSingleVertex = false;
+    let newVertexId = null;
+
+    if (selectedVertexIds.length > 1) {
+      const { sortedVertexIds, normal } = getSortedVertexIds(meshData, selectedVertexIds);
+      const neighbors = getNeighborFaces(meshData, selectedEdgeIds);
+      const shouldFlip = shouldFlipNormal(meshData, sortedVertexIds, normal, neighbors);
+
+      if (shouldFlip) {
+        sortedVertexIds.reverse();
+      }
+
+      result = this.vertexEditor.fill.createEdgeFaceFromVertices(sortedVertexIds);
+      if (!result) return;
+    } else {
+      const v0 = meshData.getVertex(selectedVertexIds[0]);
+      if (!v0) return;
+
+      const resultQuad = this.vertexEditor.fill.computeQuadFromVertex(v0);
+      if (!resultQuad) return;
+
+      const { quadVertexIds, openEdgeIds } = resultQuad;
+
+      newVertexId = quadVertexIds[3];
+      createdFromSingleVertex = true;
+
+      const { sortedVertexIds, normal } = getSortedVertexIds(meshData, quadVertexIds);
+      const neighbors = getNeighborFaces(meshData, openEdgeIds);
+      const shouldFlip = shouldFlipNormal(meshData, sortedVertexIds, normal, neighbors);
+
+      if (shouldFlip) {
+        sortedVertexIds.reverse();
+      }
+
+      result = this.vertexEditor.fill.createEdgeFaceFromVertices(sortedVertexIds);
+      if (!result) return;
+    }
+
+    const { edgeId, faceId } = result;
+
+    let newVertices = [];
+    let newEdges = [];
+
+    if (faceId !== null) {
+      const newFace = meshData.faces.get(faceId);
+      if (!newFace) return;
+
+      newVertices = [...newFace.vertexIds];
+      newEdges = [...newFace.edgeIds];
+    }
+
+    if (edgeId !== null) {
+      const newEdge = meshData.edges.get(edgeId);
+      if (!newEdge) return;
+
+      newVertices = [newEdge.v1Id, newEdge.v2Id];
+      newEdges = [edgeId];
+    }
+
+    MeshDataRegion.captureNewElements(meshData, startElements, beforeSnapshot);
+    const afterRegionIds = MeshDataRegion.idsOf(beforeSnapshot);
+    const afterSnapshot = MeshDataRegion.snapshot(meshData, afterRegionIds);
+
+    // Select the result first so the command records it; execute() re-applies it.
+    if (mode === 'vertex') {
+      if (createdFromSingleVertex && newVertexId !== null) {
+        this.editSelection.selectVertices([newVertexId]);
+      } else {
+        this.editSelection.selectVertices(newVertices);
+      }
+    } else if (mode === 'edge') {
+      this.editSelection.selectEdges(newEdges);
+    }
+
+    const command = new CreateFaceCommand(this.editor, editedObject, beforeSnapshot, afterSnapshot)
+      .setSelectionStates(beforeSelection, this.editSelection.getSnapshot());
+    this.editor.execute(command);
+  }
+
+  deleteSelected(action) {
+    const editedObject = this.editSelection.editedObject;
+    if (!editedObject) return;
+
+    const selectedVertexIds = Array.from(this.editSelection.selectedVertexIds);
+    const selectedEdgeIds = Array.from(this.editSelection.selectedEdgeIds);
+    const selectedFaceIds = Array.from(this.editSelection.selectedFaceIds);
+
+    if (
+      selectedVertexIds.length === 0 && selectedEdgeIds.length === 0 && selectedFaceIds.length === 0
+    ) return;
+
+    const meshData = editedObject.userData.meshData;
+
+    const beforeSelection = this.editSelection.getSnapshot();
+
+    const beforeRegionIds = MeshDataRegion.expand(
+      meshData,
+      { vertexIds: selectedVertexIds, edgeIds: selectedEdgeIds, faceIds: selectedFaceIds },
+      2
+    );
+    const beforeSnapshot = MeshDataRegion.snapshot(meshData, beforeRegionIds);
+
+    const startElements = {
+      startVertexId: meshData.nextVertexId,
+      startEdgeId: meshData.nextEdgeId,
+      startFaceId: meshData.nextFaceId,
+    };
+
+    this.vertexEditor.setObject(editedObject);
+    if (action === 'delete-vertices') {
+      this.vertexEditor.delete.deleteVertices(selectedVertexIds);
+    } else if (action === 'delete-edges') {
+      this.vertexEditor.delete.deleteEdges(selectedEdgeIds);
+    } else if (action === 'delete-faces') {
+      this.vertexEditor.delete.deleteFaces(selectedFaceIds);
+    } else if (action === 'delete-only-edges-faces') {
+      this.vertexEditor.delete.deleteEdgesAndFacesOnly(selectedEdgeIds);
+    } else if (action === 'delete-only-faces') {
+      this.vertexEditor.delete.deleteFacesOnly(selectedFaceIds);
+    } else if (action === 'dissolve-vertices') {
+      this.vertexEditor.dissolve.dissolveVertices(selectedVertexIds);
+    } else if (action === 'dissolve-edges') {
+      this.vertexEditor.dissolve.dissolveEdges(selectedEdgeIds);
+    } else if (action === 'dissolve-faces') {
+      this.vertexEditor.dissolve.dissolveFaces(selectedFaceIds);
+    }
+
+    MeshDataRegion.captureNewElements(meshData, startElements, beforeSnapshot);
+    const afterRegionIds = MeshDataRegion.idsOf(beforeSnapshot);
+    const afterSnapshot = MeshDataRegion.snapshot(meshData, afterRegionIds);
+
+    const command = new DeleteSelectionCommand(this.editor, editedObject, beforeSnapshot, afterSnapshot)
+      .setSelectionStates(beforeSelection, null);
+    this.editor.execute(command);
+  }
+
+  separateSelection() {
+    const editedObject = this.editSelection.editedObject;
+    const meshData = editedObject?.userData?.meshData;
+    if (!meshData) return;
+
+    const mode = this.editSelection.subSelectionMode;
+
+    const selectedVertexIds = Array.from(this.editSelection.selectedVertexIds);
+    const selectedEdgeIds = Array.from(this.editSelection.selectedEdgeIds);
+    const selectedFaceIds = Array.from(this.editSelection.selectedFaceIds);
+
+    if (
+      (mode === 'vertex' && selectedVertexIds.length === 0) ||
+      (mode === 'edge' && selectedEdgeIds.length === 0) ||
+      (mode === 'face' && selectedFaceIds.length === 0)
+    ) return;
+
+    const beforeSelection = this.editSelection.getSnapshot();
+
+    const beforeRegionIds = MeshDataRegion.expand(
+      meshData,
+      { vertexIds: selectedVertexIds, edgeIds: selectedEdgeIds, faceIds: selectedFaceIds },
+      1
+    );
+    const beforeSnapshot = MeshDataRegion.snapshot(meshData, beforeRegionIds);
+
+    const startElements = {
+      startVertexId: meshData.nextVertexId,
+      startEdgeId: meshData.nextEdgeId,
+      startFaceId: meshData.nextFaceId,
+    };
+
+    const { extracted: newMeshData, map } = this.meshEditor.extractMeshData(meshData, mode, this.editSelection);
+
+    const beforeSeam = SeamSnapshot.read(editedObject);
+    const beforeSharp = SharpSnapshot.read(editedObject);
+
+    this.vertexEditor.setObject(editedObject);
+    if (mode === 'vertex') {
+      this.vertexEditor.delete.deleteSelectionVertices(selectedVertexIds);
+    } else if (mode === 'edge') {
+      this.vertexEditor.delete.deleteSelectionEdges(selectedEdgeIds);
+    } else if (mode === 'face') {
+      this.vertexEditor.delete.deleteSelectionFaces(selectedFaceIds);
+    }
+
+    const { separated: newSeam, remaining: afterSeam } = SeamUtils.splitSeams(editedObject, map.edgeIdMap, meshData);
+    const seamData = { before: beforeSeam, after: afterSeam, separated: newSeam };
+
+    const { separated: newSharp, remaining: afterSharp } = SharpUtils.splitSharps(editedObject, map.edgeIdMap, meshData);
+    const sharpData = { before: beforeSharp, after: afterSharp, separated: newSharp }
+
+    MeshDataRegion.captureNewElements(meshData, startElements, beforeSnapshot);
+    const afterRegionIds = MeshDataRegion.idsOf(beforeSnapshot);
+    const afterSnapshot = MeshDataRegion.snapshot(meshData, afterRegionIds);
+
+    const command = new SeparateSelectionCommand(
+      this.editor, editedObject, beforeSnapshot, afterSnapshot, newMeshData, seamData, sharpData
+    ).setSelectionStates(beforeSelection, null);
+    this.editor.execute(command);
+  }
+
+  mergeSelection(action) {
+    const mode = action?.startsWith('merge-at-')
+      ? action.slice('merge-at-'.length) : 'center';
+
+    return this.runMerge((vertexIds) => {
+      const targetId = this.vertexEditor.topology.mergeVertices(vertexIds, mode);
+      return targetId != null ? [targetId] : [];
+    });
+  }
+
+  mergeByDistance(threshold = 0.001) {
+    return this.runMerge((vertexIds) =>
+      this.vertexEditor.topology.mergeByDistance(vertexIds, threshold)
+    );
+  }
+
+  runMerge(mergeFn) {
+    const editedObject = this.editSelection.editedObject;
+    if (!editedObject) return 0;
+
+    const meshData = editedObject.userData.meshData;
+
+    const selectedVertexIds = Array.from(this.editSelection.selectedVertexIds);
+    if (selectedVertexIds.length < 2) return 0;
+
+    this.vertexEditor.setObject(editedObject);
+
+    const beforeSelection = this.editSelection.getSnapshot();
+
+    const beforeRegionIds = MeshDataRegion.expand(
+      meshData,
+      { vertexIds: selectedVertexIds },
+      1
+    );
+    const beforeSnapshot = MeshDataRegion.snapshot(meshData, beforeRegionIds);
+
+    const startElements = {
+      startVertexId: meshData.nextVertexId,
+      startEdgeId: meshData.nextEdgeId,
+      startFaceId: meshData.nextFaceId,
+    };
+
+    const targetIds = mergeFn(selectedVertexIds) ?? [];
+
+    const removed = selectedVertexIds.length - targetIds.length;
+    if (removed <= 0) return 0;
+
+    MeshDataRegion.captureNewElements(meshData, startElements, beforeSnapshot);
+    const afterRegionIds = MeshDataRegion.idsOf(beforeSnapshot);
+    const afterSnapshot = MeshDataRegion.snapshot(meshData, afterRegionIds);
+
+    this.editSelection.selectVertices(targetIds);
+
+    const command = new MergeSelectionCommand(this.editor, editedObject, beforeSnapshot, afterSnapshot)
+      .setSelectionStates(beforeSelection, this.editSelection.getSnapshot());
+    this.editor.execute(command);
+
+    return removed;
+  }
+
+  splitSelection() {
+    const editedObject = this.editSelection.editedObject;
+    const meshData = editedObject?.userData?.meshData;
+    if (!meshData) return;
+
+    const mode = this.editSelection.subSelectionMode;
+
+    const selectedVertexIds = Array.from(this.editSelection.selectedVertexIds);
+    const selectedEdgeIds = Array.from(this.editSelection.selectedEdgeIds);
+    const selectedFaceIds = Array.from(this.editSelection.selectedFaceIds);
+
+    if (
+      (mode === 'vertex' && selectedVertexIds.length === 0) ||
+      (mode === 'edge' && selectedEdgeIds.length === 0) ||
+      (mode === 'face' && selectedFaceIds.length === 0)
+    ) return;
+
+    this.vertexEditor.setObject(editedObject);
+
+    const beforeSelection = this.editSelection.getSnapshot();
+
+    const beforeRegionIds = MeshDataRegion.expand(
+      meshData,
+      { vertexIds: selectedVertexIds, edgeIds: selectedEdgeIds, faceIds: selectedFaceIds },
+      1
+    );
+    const beforeSnapshot = MeshDataRegion.snapshot(meshData, beforeRegionIds);
+
+    const startElements = {
+      startVertexId: meshData.nextVertexId,
+      startEdgeId: meshData.nextEdgeId,
+      startFaceId: meshData.nextFaceId,
+    };
+
+    let duplicationResult;
+    if (mode === 'vertex') {
+      duplicationResult = this.vertexEditor.duplicate.duplicateSelectionVertices(selectedVertexIds);
+    } else if (mode === 'edge') {
+      duplicationResult = this.vertexEditor.duplicate.duplicateSelectionEdges(selectedEdgeIds);
+    } else if (mode === 'face') {
+      duplicationResult = this.vertexEditor.duplicate.duplicateSelectionFaces(selectedFaceIds);
+    }
+
+    const { newVertexIds, newEdgeIds, newFaceIds } = duplicationResult;
+
+    if (mode === 'vertex') {
+      this.vertexEditor.delete.deleteSelectionVertices(selectedVertexIds);
+    } else if (mode === 'edge') {
+      this.vertexEditor.delete.deleteSelectionEdges(selectedEdgeIds);
+    } else if (mode === 'face') {
+      this.vertexEditor.delete.deleteSelectionFaces(selectedFaceIds);
+    }
+
+    MeshDataRegion.captureNewElements(meshData, startElements, beforeSnapshot);
+    const afterRegionIds = MeshDataRegion.idsOf(beforeSnapshot);
+    const afterSnapshot = MeshDataRegion.snapshot(meshData, afterRegionIds);
+
+    // Originals are deleted; drop their ids, then select the copy so the command records it.
+    this.editSelection.clearSelection();
+    if (mode === 'vertex') {
+      this.editSelection.selectVertices(newVertexIds);
+    } else if (mode === 'edge') {
+      this.editSelection.selectEdges(newEdgeIds);
+    } else if (mode === 'face') {
+      this.editSelection.selectFaces(newFaceIds);
+    }
+
+    const command = new SplitSelectionCommand(this.editor, editedObject, beforeSnapshot, afterSnapshot)
+      .setSelectionStates(beforeSelection, this.editSelection.getSnapshot());
+    this.editor.execute(command);
+  }
+
+  flipSelectedFacesNormal() {
+    const editedObject = this.editSelection.editedObject;
+    const meshData = editedObject?.userData?.meshData;
+    if (!meshData) return;
+
+    const selectedFaceIds = Array.from(this.editSelection.selectedFaceIds);
+    if (selectedFaceIds.length === 0) return;
+
+    this.vertexEditor.setObject(editedObject);
+
+    const selection = this.editSelection.getSnapshot();
+
+    const beforeRegionIds = MeshDataRegion.expand(
+      meshData,
+      { faceIds: selectedFaceIds },
+      1
+    );
+    const beforeSnapshot = MeshDataRegion.snapshot(meshData, beforeRegionIds);
+
+    const startElements = {
+      startVertexId: meshData.nextVertexId,
+      startEdgeId: meshData.nextEdgeId,
+      startFaceId: meshData.nextFaceId,
+    };
+
+    this.meshEditor.flipNormals(meshData, selectedFaceIds);
+
+    MeshDataRegion.captureNewElements(meshData, startElements, beforeSnapshot);
+    const afterRegionIds = MeshDataRegion.idsOf(beforeSnapshot);
+    const afterSnapshot = MeshDataRegion.snapshot(meshData, afterRegionIds);
+
+    const command = new FlipNormalsCommand(this.editor, editedObject, beforeSnapshot, afterSnapshot)
+      .setSelectionStates(selection, selection);
+    this.editor.execute(command);
+  }
+
+  subdivideSelection() {
+    const editedObject = this.editSelection.editedObject;
+    const selectedEdgeIds = Array.from(this.editSelection.selectedEdgeIds);
+    const meshData = editedObject.userData.meshData;
+    
+    this.vertexEditor.setObject(editedObject);
+
+    const beforeSelection = this.editSelection.getSnapshot();
+
+    const beforeRegionIds = MeshDataRegion.expand(
+      meshData,
+      { edgeIds: selectedEdgeIds },
+      1
+    );
+    const beforeSnapshot = MeshDataRegion.snapshot(meshData, beforeRegionIds);
+
+    const startElements = {
+      startVertexId: meshData.nextVertexId,
+      startEdgeId: meshData.nextEdgeId,
+      startFaceId: meshData.nextFaceId,
+    };
+
+    const { newVertexIds } = this.vertexEditor.subdivide.subdivideEdges(selectedEdgeIds);
+
+    MeshDataRegion.captureNewElements(meshData, startElements, beforeSnapshot);
+    const afterRegionIds = MeshDataRegion.idsOf(beforeSnapshot);
+    const afterSnapshot = MeshDataRegion.snapshot(meshData, afterRegionIds);
+
+    this.editSelection.selectVertices(newVertexIds);
+
+    const command = new SubdivideSelectionCommand(this.editor, editedObject, beforeSnapshot, afterSnapshot)
+      .setSelectionStates(beforeSelection, this.editSelection.getSnapshot());
+    this.editor.execute(command);
+  }
+
+  bridgeSelection() {
+    const editedObject = this.editSelection.editedObject;
+    const meshData = editedObject?.userData?.meshData;
+    if (!meshData) return;
+
+    const selectedVertexIds = Array.from(this.editSelection.selectedVertexIds);
+    const selectedEdgeIds = Array.from(this.editSelection.selectedEdgeIds);
+    const selectedFaceIds = Array.from(this.editSelection.selectedFaceIds);
+
+    this.vertexEditor.setObject(editedObject);
+
+    const beforeSelection = this.editSelection.getSnapshot();
+
+    const beforeRegionIds = MeshDataRegion.expand(
+      meshData,
+      { edgeIds: selectedEdgeIds },
+      1
+    );
+    const beforeSnapshot = MeshDataRegion.snapshot(meshData, beforeRegionIds);
+
+    const startElements = {
+      startVertexId: meshData.nextVertexId,
+      startEdgeId: meshData.nextEdgeId,
+      startFaceId: meshData.nextFaceId,
+    };
+
+    const restoreMesh = () => {
+      MeshDataRegion.captureNewElements(meshData, startElements, beforeSnapshot);
+      this.vertexEditor.applyDelta(beforeSnapshot);
+    };
+
+    const runBridge = (params) => {
+      restoreMesh();
+
+      const result = this.vertexEditor.bridge.bridgeEdgeLoops(
+        selectedVertexIds, selectedEdgeIds, selectedFaceIds, params
+      );
+      if (!result.success) {
+        this.editSelection.setSelection(beforeSelection);
+        return null;
+      }
+
+      editedObject.geometry.computeBoundingBox();
+      editedObject.geometry.computeBoundingSphere();
+
+      this.editSelection.selectVertices(result.newVertexIds);
+      this.signals.editSelectionRefresh.dispatch();
+
+      return result;
+    };
+
+    if (!runBridge({ numCuts: 0, smoothness: 1, twist: 0 })) return;
+
+    this.operatorPanel.open({
+      title: 'Bridge Edge Loops',
+      params: { numCuts: 0, smoothness: 1, twist: 0 },
+      schema: [
+        { key: 'numCuts', label: 'Number of Cuts', min: 0, max: 50, step: 1 },
+        { key: 'smoothness', label: 'Smoothness', min: 0, max: 1, step: 0.05 },
+        { key: 'twist', label: 'Twist', min: -50, max: 50, step: 1 },
+      ],
+      onUpdate: (params) => {
+        runBridge(params);
+      },
+      onCommit: () => {
+        MeshDataRegion.captureNewElements(meshData, startElements, beforeSnapshot);
+        const afterRegionIds = MeshDataRegion.idsOf(beforeSnapshot);
+        const afterSnapshot = MeshDataRegion.snapshot(meshData, afterRegionIds);
+
+        // Current selection is the last bridge result; execute() re-applies it.
+        const command = new BridgeSelectionCommand(this.editor, editedObject, beforeSnapshot, afterSnapshot)
+          .setSelectionStates(beforeSelection, this.editSelection.getSnapshot());
+        this.editor.execute(command);
+      },
+      onCancel: () => {
+        restoreMesh();
+        this.editSelection.setSelection(beforeSelection);
+      },
+    });
+  }
+
+  setSharp(value) {
+    const object = this.editSelection.editedObject;
+    if (!object) return;
+
+    const selectedEdgeIds = this.editSelection.selectedEdgeIds;
+    if (!selectedEdgeIds?.size) return;
+
+    const command = new SetSharpCommand(this.editor, object, [...selectedEdgeIds], value);
+    this.editor.execute(command);
+  }
+}

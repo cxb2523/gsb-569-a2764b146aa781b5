@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Kokraf - Collaborative 3D Modeling Tool</title>
+
+    <!-- Meta Description -->
+    <meta name="description" content="Kokraf is a collaborative 3D modeling tool built for the web. Create, edit, and share 3D scenes in real-time.">
+
+    <!-- Favicon and App Name -->
+    <meta name="application-name" content="Kokraf" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon_io/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon_io/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon_io/favicon-16x16.png">
+    <link rel="icon" href="/assets/favicon_io/favicon.ico" type="image/x-icon">
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon_io/android-chrome-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/assets/favicon_io/android-chrome-512x512.png">
+    <link rel="manifest" href="/assets/favicon_io/site.webmanifest">
+
+    <!-- Open Graph Tags -->
+    <meta property="og:title" content="Collaborative 3D Modeling Tool" />
+    <meta property="og:description" content="Create, edit, and share 3D scenes in real-time. Kokraf brings collaborative 3D modeling to the web." />
+    <meta property="og:image" content="https://kokraf.com/assets/images/KokrafPreview.png" />
+    <meta property="og:url" content="https://kokraf.com" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Kokraf" />
+
+    <!-- Structured Data for SEO -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Kokraf",
+      "operatingSystem": "Web",
+      "applicationCategory": "DesignApplication",
+      "url": "https://kokraf.com",
+      "description": "Kokraf is a collaborative 3D modeling tool built for the web. Create, edit, and share 3D scenes in real-time.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0.00",
+        "priceCurrency": "USD"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Kokraf",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://kokraf.com/assets/images/KokrafLogo.png",
+          "width": 512,
+          "height": 512
+        }
+      },
+      "potentialAction": [
+        {
+          "@type": "ViewAction",
+          "name": "Open Kokraf App",
+          "target": "https://kokraf.com"
+        },
+        {
+          "@type": "ViewAction",
+          "name": "View User Manual",
+          "target": "https://kokraf.com/manual"
+        },
+        {
+          "@type": "ViewAction",
+          "name": "Explore",
+          "target": "https://kokraf.com/explore"
+        },
+        {
+          "@type": "ViewAction",
+          "name": "View Pricing",
+          "target": "https://kokraf.com/pricing"
+        }
+      ]
+    }
+    </script>
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/menu-bar.css" />
+    <link rel="stylesheet" href="css/panel-tabs.css" />
+    <link rel="stylesheet" href="css/toolbar.css" />
+    <link rel="stylesheet" href="css/viewport-controls.css" />
+    <link rel="stylesheet" href="css/details-panel.css" />
+    <link rel="stylesheet" href="css/context-menu.css" />
+    <link rel="stylesheet" href="css/login-panel.css" />
+    <link rel="stylesheet" href="css/upgrade-panel.css" />
+    <link rel="stylesheet" href="css/account-panel.css" />
+    <link rel="stylesheet" href="css/cloud-save-panel.css" />
+    <link rel="stylesheet" href="css/dropdown.css" />
+    <link rel="stylesheet" href="css/generate-texture-panel.css" />
+    <link rel="stylesheet" href="css/panel-container.css" />
+    <link rel="stylesheet" href="css/uv-controls.css" />
+    <link rel="stylesheet" href="css/agent-panel.css" />
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.176.0/build/three.module.js",
+          "jsm/": "https://cdn.jsdelivr.net/npm/three@0.176.0/examples/jsm/",
+          "stats.js": "https://cdn.jsdelivr.net/npm/stats.js@0.17.0/src/Stats.js",
+
+          "three/examples/": "https://cdn.jsdelivr.net/npm/three@0.176.0/examples/",
+          "three-gpu-pathtracer": "https://cdn.jsdelivr.net/npm/three-gpu-pathtracer@0.0.23/build/index.module.js",
+          "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.4/build/index.module.js",
+          "earcut": "https://cdn.jsdelivr.net/npm/earcut@3.0.2/src/earcut.js",
+          "mathjs": "https://esm.sh/mathjs@14.8.1?bundle",
+          "supabase": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm",
+          "manifold-3d": "https://cdn.jsdelivr.net/npm/manifold-3d@3.4.1/+esm",
+
+          "marked": "https://cdn.jsdelivr.net/npm/marked@15.0.12/lib/marked.esm.js",
+          "dompurify": "https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.es.mjs"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="app-container">
+      <div id="menu-container"></div>
+
+      <div class="editor-container">
+        <div class="canvas-viewport-wrapper" id="canvas-viewport-wrapper">
+          <div class="viewport-3d-pane" id="viewport-3d-pane">
+            <canvas id="three-canvas"></canvas>
+            <div id="toolbar-container"></div>
+            <div id="viewport-controls-container"></div>
+          </div>
+          <div class="viewport-split-resizer hidden" id="viewport-split-resizer"></div>
+          <div class="uv-pane hidden" id="uv-pane">
+            <canvas id="uv-canvas"></canvas>
+            <div id="uv-controls-container"></div>
+          </div>
+        </div>
+        
+        <div id="properties-panel-container" class="panel-container"></div>
+        <div id="operator-panel-container" class="panel-container"></div>
+        <div id="viewHelper"></div>
+        <div class="right-panel-resizer" id="right-panel-resizer"></div>
+        <div id="right-panel-container"></div>
+        <div id="floating-container"></div>
+      </div>
+
+      <div id="overlay-root-login"></div>
+      <div id="overlay-root-account"></div>
+
+      <!-- Hidden links for SEO / Google sitelinks -->
+      <ul style="display: none;" id="hidden-seo-links">
+        <li><a href="https//kokraf.com/explore">Explore</a></li>
+        <li><a href="https://kokraf.com/manual">Manual</a></li>
+        <li><a href="https://kokraf.com/about">About</a></li>
+        <li><a href="https://kokraf.com/pricing">Pricing</a></li>
+      </ul>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+    <script>
+      function toggleCheck(item) {
+        item.classList.toggle('checked');
+      }
+
+      function handleEnter(event, input) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          input.blur(); 
+        }
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,415 @@
+import * as THREE from 'three';
+
+export class VertexTopology {
+  constructor(vertexEditor) {
+    this.vertexEditor = vertexEditor;
+  }
+
+  get meshData() {
+    return this.vertexEditor.meshData;
+  }
+
+  mergeVertices(vertexIds, mode = 'center') {
+    if (!Array.isArray(vertexIds) || vertexIds.length < 2) return null;
+
+    const vertices = vertexIds
+      .map((id) => this.meshData.getVertex(id))
+      .filter((v) => v !== null);
+
+    if (vertices.length < 2) return null;
+
+    const target = mode === 'last' ? vertices[vertices.length - 1] : vertices[0];
+
+    const removedVertices = vertices.filter((v) => v.id !== target.id);
+    const removedIds = new Set(removedVertices.map((v) => v.id));
+    const allMergeIds = new Set(vertices.map((v) => v.id));
+
+    if (mode === 'center') {
+      const center = new THREE.Vector3();
+      for (const v of vertices) {
+        center.add(new THREE.Vector3(v.position.x, v.position.y, v.position.z));
+      }
+      center.divideScalar(vertices.length);
+      target.position = { x: center.x, y: center.y, z: center.z };
+    }
+
+    // Collect Affected Faces
+    const affectedFaceIds = new Set();
+    vertices.forEach(v => v.faceIds.forEach(fid => affectedFaceIds.add(fid)));
+
+    // Rewire and Clean Edges
+    for (const v of removedVertices) {
+      const edgesToProcess = [...v.edgeIds];
+
+      for (const edgeId of edgesToProcess) {
+        const edge = this.meshData.edges.get(edgeId);
+        if (!edge) continue;
+
+        // Find the vertex on the other side of the edge
+        const neighborId = edge.v1Id === v.id ? edge.v2Id : edge.v1Id;
+
+        // Case A: Edge is between merged vertices → remove it
+        if (allMergeIds.has(neighborId)) {
+          this.meshData.edgeKeyMap.delete(this.meshData._getEdgeKey(edge.v1Id, edge.v2Id));
+          this.meshData.edges.delete(edge.id);
+          const neighbor = this.meshData.getVertex(neighborId);
+          if (neighbor) neighbor.edgeIds.delete(edge.id);
+          continue;
+        }
+
+        // Case B: Edge goes outside the merge group
+        const existingEdge = this.meshData.getEdge(target.id, neighborId);
+
+        if (existingEdge) {
+          // Duplicate edge → remove redundant one
+          const neighbor = this.meshData.getVertex(neighborId);
+          if (neighbor) neighbor.edgeIds.delete(edge.id);
+          
+          this.meshData.edgeKeyMap.delete(this.meshData._getEdgeKey(edge.v1Id, edge.v2Id));
+          this.meshData.edges.delete(edge.id);
+        } else {
+          const oldKey = this.meshData._getEdgeKey(edge.v1Id, edge.v2Id);
+
+          // Unique edge → reconnect it to target
+          if (edge.v1Id === v.id) edge.v1Id = target.id;
+          else edge.v2Id = target.id;
+
+          this.meshData.edgeKeyMap.delete(oldKey);
+          this.meshData.edgeKeyMap.set(
+            this.meshData._getEdgeKey(edge.v1Id, edge.v2Id),
+            edge
+          );
+
+          target.edgeIds.add(edge.id);
+        }
+      }
+    }
+
+    // Update and Validate Faces
+    for (const faceId of affectedFaceIds) {
+      const face = this.meshData.faces.get(faceId);
+      if (!face) continue;
+
+      // Replace removed vertices with target
+      const newVertexIds = face.vertexIds.map(vid => 
+        removedIds.has(vid) ? target.id : vid
+      );
+
+      // Remove consecutive duplicates
+      const uniqueIds = [];
+      if (newVertexIds.length > 0) {
+        uniqueIds.push(newVertexIds[0]);
+        for (let i = 1; i < newVertexIds.length; i++) {
+          if (newVertexIds[i] !== newVertexIds[i - 1]) {
+            uniqueIds.push(newVertexIds[i]);
+          }
+        }
+        if (uniqueIds.length > 1 && uniqueIds[0] === uniqueIds[uniqueIds.length - 1]) {
+          uniqueIds.pop();
+        }
+      }
+
+      // Delete face if it collapses to a line or point
+      const uniqueSet = new Set(uniqueIds);
+      if (uniqueSet.size < 3) {
+        this.vertexEditor.deleteFace(face);
+        continue;
+      }
+
+      // Apply updated vertices
+      this.meshData.faceKeyMap.delete(this.meshData._getFaceKey(face.vertexIds));
+      face.vertexIds = uniqueIds;
+      face.edgeIds.clear();
+      this.meshData.faceKeyMap.set(this.meshData._getFaceKey(uniqueIds), face);
+
+      // Rebuild face-edge links
+      for (let i = 0; i < uniqueIds.length; i++) {
+        const v1 = uniqueIds[i];
+        const v2 = uniqueIds[(i + 1) % uniqueIds.length];
+        
+        const edge = this.meshData.getEdge(v1, v2);
+        
+        if (edge) {
+          face.edgeIds.add(edge.id);
+          edge.faceIds.add(face.id);
+        }
+      }
+      
+      target.faceIds.add(face.id);
+    }
+
+    // Remove merged vertices
+    for (const v of removedVertices) {
+      this.vertexEditor.deleteVertex(v);
+    }
+
+    return target.id;
+  }
+
+  mergeByDistance(vertexIds, threshold = 0.0001, mode = 'center') {
+    if (!this.meshData || !Array.isArray(vertexIds)) return [];
+
+    const vertices = vertexIds
+      .map((id) => this.meshData.getVertex(id))
+      .filter((v) => v);
+
+    if (vertices.length < 2) return vertices.map((v) => v.id);
+
+    const roots = VertexTopology.clusterByDistance(vertices, threshold);
+
+    // Group by root
+    const clusters = new Map();
+    for (const v of vertices) {
+      const root = roots.get(v.id);
+      let group = clusters.get(root);
+      if (!group) clusters.set(root, (group = []));
+      group.push(v.id);
+    }
+
+    // Merge each cluster — clusters are disjoint, so the passes don't interfere
+    const targetIds = [];
+    const mergedTargetIds = [];
+
+    for (const group of clusters.values()) {
+      if (group.length === 1) {
+        targetIds.push(group[0]);
+        continue;
+      }
+
+      const targetId = this.mergeVertices(group, mode);
+      if (targetId != null) {
+        targetIds.push(targetId);
+        mergedTargetIds.push(targetId);
+      }
+    }
+
+    if (mergedTargetIds.length) {
+      this.removeDuplicateFaces(mergedTargetIds);
+    }
+
+    return targetIds;
+  }
+
+  removeDuplicateFaces(vertexIds) {
+    const faceIds = new Set();
+
+    for (const vid of vertexIds) {
+      const v = this.meshData.getVertex(vid);
+      if (v) v.faceIds.forEach((fid) => faceIds.add(fid));
+    }
+
+    const seen = new Set();
+
+    for (const fid of faceIds) {
+      const face = this.meshData.faces.get(fid);
+      if (!face) continue;
+
+      const key = [...new Set(face.vertexIds)].sort((a, b) => a - b).join('_');
+
+      if (seen.has(key)) this.vertexEditor.deleteFace(face);
+      else seen.add(key);
+    }
+  }
+
+  static clusterByDistance(items, threshold, getPosition = (it) => it.position) {
+    const cell = Math.max(threshold, 1e-9);
+    const grid = new Map();
+
+    const cellOf = (p) => [
+      Math.floor(p.x / cell),
+      Math.floor(p.y / cell),
+      Math.floor(p.z / cell),
+    ];
+
+    for (const item of items) {
+      const [cx, cy, cz] = cellOf(getPosition(item));
+      const key = `${cx},${cy},${cz}`;
+      let bucket = grid.get(key);
+      if (!bucket) grid.set(key, (bucket = []));
+      bucket.push(item);
+    }
+
+    const parent = new Map(items.map((it) => [it.id, it.id]));
+
+    const find = (id) => {
+      while (parent.get(id) !== id) {
+        parent.set(id, parent.get(parent.get(id)));
+        id = parent.get(id);
+      }
+      return id;
+    };
+
+    const t2 = threshold * threshold;
+
+    for (const item of items) {
+      const p = getPosition(item);
+      const [cx, cy, cz] = cellOf(p);
+
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dz = -1; dz <= 1; dz++) {
+            const bucket = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
+            if (!bucket) continue;
+
+            for (const other of bucket) {
+              if (other.id <= item.id) continue;
+
+              const q = getPosition(other);
+              const ax = p.x - q.x, ay = p.y - q.y, az = p.z - q.z;
+
+              if (ax * ax + ay * ay + az * az <= t2) {
+                const a = find(item.id), b = find(other.id);
+                if (a !== b) parent.set(b, a);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    const roots = new Map();
+    for (const item of items) roots.set(item.id, find(item.id));
+    return roots;
+  }
+
+  groupConnectedEdges(meshData, edgeIds) {
+    const selectedSet = new Set(edgeIds);
+    const visitedEdges = new Set();
+    const componentSet = [];
+
+    const vertexToEdges = new Map();
+
+    for (const edgeId of selectedSet) {
+      const edge = meshData.edges.get(edgeId);
+      if (!edge) continue;
+
+      for (const vId of [edge.v1Id, edge.v2Id]) {
+        if (!vertexToEdges.has(vId)) {
+          vertexToEdges.set(vId, new Set());
+        }
+        vertexToEdges.get(vId).add(edgeId);
+      }
+    }
+
+    // Traverse connected components
+    for (const startEdgeId of selectedSet) {
+      if (visitedEdges.has(startEdgeId)) continue;
+
+      const stack = [startEdgeId];
+      const componentEdges = new Set();
+
+      while (stack.length > 0) {
+        const currentEdgeId = stack.pop();
+        if (visitedEdges.has(currentEdgeId)) continue;
+
+        visitedEdges.add(currentEdgeId);
+        componentEdges.add(currentEdgeId);
+
+        const edge = meshData.edges.get(currentEdgeId);
+        if (!edge) continue;
+
+        for (const vId of [edge.v1Id, edge.v2Id]) {
+          const connectedEdges = vertexToEdges.get(vId);
+          if (!connectedEdges) continue;
+
+          for (const nextEdgeId of connectedEdges) {
+            if (!visitedEdges.has(nextEdgeId)) {
+              stack.push(nextEdgeId);
+            }
+          }
+        }
+      }
+
+      componentSet.push(componentEdges);
+    }
+    return componentSet;
+  }
+
+  buildSelectedVertexGraph(meshData, selectedEdges) {
+    const vertexToEdges = new Map();
+    const selectedVertices = new Set();
+
+    for (const edgeId of selectedEdges) {
+      const edge = meshData.edges.get(edgeId);
+      if (!edge) continue;
+
+      for (const vId of [edge.v1Id, edge.v2Id]) {
+        selectedVertices.add(vId);
+
+        if (!vertexToEdges.has(vId)) {
+          vertexToEdges.set(vId, new Set());
+        }
+
+        vertexToEdges.get(vId).add(edgeId);
+      }
+    }
+
+    const vertexInfo = new Map();
+
+    for (const vId of selectedVertices) {
+      const connectedEdges = vertexToEdges.get(vId) || new Set();
+
+      vertexInfo.set(vId, {
+        vertexId: vId,
+        valence: connectedEdges.size,
+        selectedEdgeIds: [...connectedEdges]
+      });
+    }
+
+    return vertexInfo;
+  }
+
+  groupEdgesBySharedFace(edges) {
+    const groups = [];
+    const visited = new Set();
+
+    // Build adjacency: edgeId → Set of connected edgeIds
+    const adjacency = new Map();
+
+    for (const edge of edges) {
+      adjacency.set(edge.id, new Set());
+    }
+
+    for (let i = 0; i < edges.length; i++) {
+      for (let j = i + 1; j < edges.length; j++) {
+        const e1 = edges[i];
+        const e2 = edges[j];
+
+        // Check if they share a face
+        const sharesFace = [...e1.faceIds].some(fid =>
+          e2.faceIds.has(fid)
+        );
+
+        if (sharesFace) {
+          adjacency.get(e1.id).add(e2.id);
+          adjacency.get(e2.id).add(e1.id);
+        }
+      }
+    }
+
+    for (const edge of edges) {
+      if (visited.has(edge.id)) continue;
+
+      const stack = [edge.id];
+      const group = [];
+
+      while (stack.length > 0) {
+        const currentId = stack.pop();
+        if (visited.has(currentId)) continue;
+
+        visited.add(currentId);
+        group.push(currentId);
+
+        for (const neighborId of adjacency.get(currentId)) {
+          if (!visited.has(neighborId)) {
+            stack.push(neighborId);
+          }
+        }
+      }
+
+      groups.push(group);
+    }
+
+    return groups;
+  }
+}

@@ -1,0 +1,399 @@
+import * as THREE from 'three';
+import Stats from 'stats.js';
+import Renderer from './core/Renderer.js';
+import SceneManager from './core/SceneManager.js';
+import CameraManager from './core/CameraManager.js';
+import ControlsManager from './core/ControlsManager.js';
+import Toolbar from './ui/Toolbar.js';
+import Selection from './selection/Selection.js';
+import UIComponentsLoader from './ui/UIComponentsLoader.js';
+import PanelResizer from './ui/PanelResizer.js';
+import ModeManager from './core/ModeManager.js';
+import { ViewportViewHelper } from './ui/Viewport.ViewHelper.js';
+import Menubar from './ui/Menubar.js';
+import { Signal } from './utils/Signals.js';
+import { ObjectFactory } from './utils/ObjectFactory.js';
+import { History } from './core/History.js';
+import { KeyHandler } from './core/KeyHandler.js';
+import ViewportControls from './ui/Viewport.Controls.js';
+import Sidebar from './ui/Sidebar.js';
+import Config from './core/Config.js';
+import { Storage } from './core/Storage.js';
+import EditSelection from './selection/EditSelection.js';
+import ContextMenu from './ui/ContextMenu.js';
+import { EditActions } from './actions/EditActions.js';
+import { ObjectActions } from './actions/ObjectActions.js';
+import { UVActions } from './actions/UVActions.js';
+import EditHelpers from './helpers/EditHelpers.js';
+import { SelectionBox } from './selection/SelectionBox.js';
+import { SnapManager } from './core/SnapManager.js';
+import { VertexEditor } from './vertex/VertexEditor.js';
+import { MeshEditor } from './vertex/MeshEditor.js';
+import { ObjectEditor } from './vertex/ObjectEditor.js';
+import OriginHelper from './helpers/OriginHelper.js';
+import { ClipboardManager } from './core/ClipboardManager.js';
+import { NameManager } from './utils/NameManager.js';
+import { ToolInputDisplay } from './ui/ToolInputDisplay.js';
+import { loadProject } from '/supabase/services/ProjectService.js';
+import { ShortcutLabel } from './core/ShortcutLabel.js';
+import { UVResizer } from './ui/UVResizer.js';
+import { UVEditor } from './uv/UVEditor.js';
+import { CommandRegistry } from './agent/CommandRegistry.js';
+import { registerAgentCommands } from './agent/AgentCommands.js';
+import { AgentBridge } from './agent/mcp/AgentBridge.js';
+import MirrorManager from './core/MirrorManager.js';
+
+export default class Editor {
+  constructor() {
+    // Signals
+    this.signals = {
+      showHelpersChanged: new Signal(),
+
+      viewportCameraChanged: new Signal(),
+      viewportShadingChanged: new Signal(),
+      viewportXRayChanged: new Signal(),
+      switchCameraView: new Signal(),
+      viewportResized: new Signal(),
+
+      cameraAdded: new Signal(),
+      cameraRemoved: new Signal(),
+
+      objectAdded: new Signal(),
+      objectRemoved: new Signal(),
+
+      objectSelected: new Signal(),
+      focusSelection: new Signal(),
+      objectFocused: new Signal(),
+      originFocused: new Signal(),
+      vertexFocused: new Signal(),
+      objectChanged: new Signal(),
+      objectDeleted: new Signal(),
+      objectDuplicated: new Signal(),
+      objectJoined: new Signal(),
+      hideSelected: new Signal(),
+      hideUnselected: new Signal(),
+      unhideAll: new Signal(),
+
+      historyChanged: new Signal(),
+      emptyScene: new Signal(),
+      layoutChanged: new Signal(),
+      saveStatusChanged: new Signal(),
+
+      sceneGraphChanged: new Signal(),
+      modeChanged: new Signal(),
+      subSelectionModeChanged: new Signal(),
+      shadingModeChanged: new Signal(),
+      switchMode: new Signal(),
+      multiSelectChanged: new Signal(),
+
+      createElementFromVertices: new Signal(),
+      deleteSelectedFaces: new Signal(),
+      separateSelection: new Signal(),
+      duplicateSelection: new Signal(),
+      mergeSelection: new Signal(),
+      splitSelection: new Signal(),
+      subdivideSelection: new Signal(),
+      bridgeSelection: new Signal(),
+
+      editSelectionChanged: new Signal(),
+      editSelectionCleared: new Signal(),
+
+      transformDragStarted: new Signal(),
+      transformDragEnded: new Signal(),
+      disableKeyHandler: new Signal(),
+
+      transformOrientationChanged: new Signal(),
+
+      showLoginPanel: new Signal(),
+      showAccountPanel: new Signal(),
+      showUpgradePanel: new Signal(),
+
+      objectTransformStart: new Signal(),
+      editTransformStart: new Signal(),
+      editCancelTransform: new Signal(),
+      editExtrudeStart: new Signal(),
+      editBevelStart: new Signal(),
+      editInsetStart: new Signal(),
+      editEdgeSlideStart: new Signal(),
+
+      objectSelectAll: new Signal(),
+      editSelectionRefresh: new Signal(),
+      editSelectAll: new Signal(),
+      editSelectNone: new Signal(),
+      editSelectLinked: new Signal(),
+      mouseSelectLinked: new Signal(),
+      editSelectRings: new Signal(),
+      editSelectLoops: new Signal(),
+      editFlipNormals: new Signal(),
+
+      objectsCopied: new Signal(),
+      objectsPasted: new Signal(),
+
+      onToolStarted: new Signal(),
+      onToolEnded: new Signal(),
+      onToolUpdated: new Signal(),
+
+      vertexPositionsUpdated: new Signal(),
+      refreshEditHelpers: new Signal(),
+      shortcutsChanged: new Signal(),
+      toolSelectObject: new Signal(),
+
+      setPaintTool: new Signal(),
+      setEditObjectPanel: new Signal(),
+      setPaintObjectPanel: new Signal(),
+      
+      hdriEnvironmentLoaded: new Signal(),
+
+      uvSelectionChanged: new Signal(),
+      uvSyncSelectionChanged: new Signal(),
+      uvsChanged: new Signal(),
+      seamsChanged: new Signal(),
+      setSeam: new Signal(),
+      sharpsChanged: new Signal(),
+      uvToolChanged: new Signal(),
+      mouseUVSelectLinked: new Signal(),
+
+      cloudSaveRequested: new Signal(),
+      mirrorChanged: new Signal(),
+      toolChanged: new Signal(),
+      objectShadingChanged: new Signal()
+    }
+
+    this.helpers = {};
+
+    // Core setup
+    this.config = new Config();
+    this.history = new History(this);
+    this.renderer = new Renderer(this);
+    this.objectFactory = new ObjectFactory(this);
+    this.cameraManager = new CameraManager(this);
+    this.sceneManager = new SceneManager(this);
+    this.nameManager = new NameManager(this);
+    this.keyHandler = new KeyHandler(this);
+    this.controlsManager = new ControlsManager(this);
+    this.snapManager = new SnapManager(this);
+    this.mirrorManager = new MirrorManager(this);
+    this.clipboardManager = new ClipboardManager(this);
+
+    // Helpers
+    this.viewportViewHelper = new ViewportViewHelper(this);
+    this.originHelper = new OriginHelper(this);
+    this.editHelpers = new EditHelpers(this);
+    this.vertexEditor = new VertexEditor(this);
+    this.selectionBox = new SelectionBox(this);
+    this.selection = new Selection(this);
+    this.editSelection = new EditSelection(this);
+    this.meshEditor = new MeshEditor(this);
+    this.objectEditor = new ObjectEditor(this);
+    this.editActions = new EditActions(this);
+    this.objectActions = new ObjectActions(this);
+    this.uvActions = new UVActions(this);
+    this.modeManager = new ModeManager(this);
+
+    // UI
+    this.uiLoader = new UIComponentsLoader();
+    this.panelResizer = new PanelResizer(this);
+    this.uvResizer = new UVResizer(this);
+    this.contextMenu = new ContextMenu(this);
+    this.uvEditor = new UVEditor(this);
+    this.viewportControls = new ViewportControls(this);
+
+    this.clock = new THREE.Clock();
+
+    this.animate = this.animate.bind(this);
+  }
+
+  async init() {
+    this.currentProjectId = null;
+    this.currentProjectName = null;
+    
+    await this.viewportControls.ready;
+
+    // Check for projectId in the URL query parameters
+    const params = new URLSearchParams(window.location.search);
+    const projectId = params.get('projectId');
+
+    if (projectId) {
+      try {
+        await loadProject(this, projectId);
+      } catch (err) {
+        console.error(err);
+
+        alert("Can't load the project");
+        history.replaceState(null, '', `/`);
+      }
+    } else {
+      const saved = await Storage.get('scene');
+      if (saved) {
+        await this.fromJSON(saved);
+      } else {
+        this.modeManager.fromJSON();
+        this.sceneManager.addAmbientLight(0xffffff, 0.5);
+        this.sceneManager.addDemoObjects();
+      }
+    }
+
+    this.sceneManager.sceneEditorHelpers.add(this.sceneManager.gridHelper);
+
+    this.toolInputDisplay = new ToolInputDisplay(this);
+    this.toolbar = new Toolbar(this);
+    this.menubar = new Menubar(this);
+    this.sidebar = new Sidebar(this);
+
+    await Promise.all([
+      this.toolbar.ready,
+      this.menubar.ready,
+      this.sidebar.ready,
+    ]);
+    
+    this.shortcutLabel = new ShortcutLabel(this);
+
+    this.stats = new Stats();
+    this.stats.showPanel(0);
+    document.body.appendChild(this.stats.dom);
+    this.stats.dom.style.left = 'auto';
+    this.stats.dom.style.right = '0px';
+    this.stats.dom.style.display = 'none';
+
+    this.renderer.applyConfig();
+
+    // Local Agent
+    this.agent = registerAgentCommands(new CommandRegistry(this));
+    this.agentBridge = new AgentBridge(this, this.agent);
+    this.agentBridge.setEnabled(false);
+    
+    this.setupListeners();
+    this.animate();
+  }
+
+  setupListeners() {
+    this.signals.historyChanged.add(async () => {
+      await Storage.set('scene', this.toJSON());
+    });
+  }
+
+  animate() {
+    requestAnimationFrame(this.animate);
+
+    this.stats.begin();
+
+    const delta = this.clock.getDelta();
+
+    this.sceneManager.gridHelper.updateUniforms(this.cameraManager.camera);
+    if (this.selection.getSelectedObject()) {
+      this.selection.update();
+    }
+
+    this.renderer.clearAll();
+    this.renderer.render(this.sceneManager.mainScene, this.cameraManager.camera);
+    this.renderer.renderWithOutline(this.sceneManager.mainScene, this.cameraManager.camera);
+    this.renderer.render(this.sceneManager.sceneHelpers, this.cameraManager.camera);
+    this.renderer.render(this.sceneManager.sceneEditorHelpers, this.cameraManager.camera);
+
+    const viewHelperAnimating = this.viewportViewHelper.viewHelper.animating;
+    const isDefaultCamera = this.cameraManager.camera.isDefault;
+    
+    if (viewHelperAnimating) {
+      this.controlsManager.disable();
+      this.viewportViewHelper.update(delta);
+    } else if (!isDefaultCamera) {
+      this.controlsManager.disable();
+    } else {
+      this.controlsManager.enable();
+    }
+
+    this.viewportViewHelper.render();
+
+    this.stats.end();
+  }
+
+  async fromJSON(json) {
+    const loader = new THREE.ObjectLoader();
+
+    this.currentProjectId = json.projectId;
+    this.currentProjectName = json.projectName;
+
+    const scene = await loader.parseAsync(json.scene);
+
+    if (json.transforms) {
+      this.sceneManager.applyTransforms(scene, json.transforms);
+    }
+
+    this.sceneManager.setScene(scene);
+    this.selection.fromJSON(json.selection);
+
+    const camera = await loader.parseAsync(json.camera);
+    this.cameraManager.replaceCameraInstance(camera);
+
+    this.modeManager.fromJSON(json.modeManager);
+    this.editSelection.fromJSON(json.editSelection);
+    this.controlsManager.fromJSON(json.controlsManager);
+
+    if (json.brush) {
+      this.modeManager.texturePainter?.fromJSON(json.brush);
+    }
+    
+    if (this.config.get('history')) {
+      this.history.fromJSON(json.history);
+    }
+    this.signals.historyChanged.dispatch();
+  }
+
+  toJSON() {
+    const texturePainter = this.modeManager?.texturePainter;
+    const restored = texturePainter?._restoreOriginalMaterial();
+
+    const { transforms, scene } = this.mirrorManager.withoutPreviews(() => ({
+      transforms: this.sceneManager.extractTransforms(this.sceneManager.mainScene),
+      scene: this.sceneManager.mainScene.toJSON(),
+    }));
+
+    const json = {
+      metadata: {
+        version: 1.0,
+        type: 'Project',
+      },
+      projectId: this.currentProjectId,
+      projectName: this.currentProjectName,
+      transforms,
+      scene,
+      camera: this.cameraManager.viewportCamera.toJSON(),
+      modeManager: this.modeManager.toJSON(),
+      controlsManager: this.controlsManager.toJSON(),
+      brush: this.modeManager.texturePainter?.toJSON(),
+
+      selection: this.selection.toJSON(),
+      editSelection: this.editSelection.toJSON(),
+    };
+
+    if (this.config.get('history')) {
+      json.history = this.history.toJSON();
+    }
+
+    if (restored) {
+      texturePainter._restorePreviewMaterial();
+    }
+
+    return json;
+  }
+
+  objectByUuid(uuid) {
+    return this.sceneManager.mainScene.getObjectByProperty('uuid', uuid);
+  }
+
+  execute(cmd) {
+    this.history.execute(cmd);
+  }
+
+  undo() {
+    this.history.undo();
+  }
+
+  redo() {
+    this.history.redo();
+  }
+
+  add(cmd) {
+    this.history.add(cmd);
+  }
+}

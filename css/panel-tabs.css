@@ -1,0 +1,331 @@
+.outliner-list {
+  max-height: 250px;
+  height: 250px;
+  overflow-y: auto;
+  padding-right: 8px;
+  margin: 20px 10px 20px 10px;
+  padding: 0;
+  list-style: none;
+  background-color: white;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #222;
+}
+
+.outliner-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.outliner-list::-webkit-scrollbar-thumb {
+  background-color: #aaa;
+  border-radius: 4px;
+}
+
+.outliner-item {
+  font-size: 12.5px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  padding: 6px 6px;
+  color: inherit;
+}
+
+.outliner-item.dragInto {
+  border: 1px dashed #aaa;
+}
+
+.outliner-item.dragTop {
+  border-top: 1px dashed #aaa;
+}
+
+.outliner-item.dragBottom {
+  border-bottom: 1px dashed #aaa;
+}
+
+.outliner-item:hover {
+  background-color: #fafafa;
+}
+
+.outliner-item.selected {
+  background-color: #f4f4f4;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.editor-container {
+  position: relative;
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.right-panel-resizer {
+  position: absolute;
+  top: 30px;
+  right: 325px;
+  width: 5px;
+  height: calc(100vh - 30px);
+  background-color: #08f;
+  cursor: col-resize;
+  z-index: 10;
+  opacity: 0;
+}
+
+body:not(.resizing-outliner) .right-panel-resizer:hover {
+  opacity: 0.7;
+}
+
+body.resizing-right-panel .right-panel-resizer {
+  opacity: 1;
+}
+
+.outliner-resizer {
+  position: relative;
+  right: 0px;
+  width: 100%;
+  height: 5px;
+  background-color: #08f;
+  cursor: row-resize;
+  z-index: 10;
+  opacity: 0;
+}
+
+.space {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin: 0px 0px;
+  vertical-align: top;
+  text-align: center;
+}
+
+body:not(.resizing-right-panel) .outliner-resizer:hover {
+  opacity: 0.7;
+}
+
+body.resizing-outliner .outliner-resizer {
+  opacity: 1;
+}
+
+#right-panel-container {
+  position: absolute;
+  top: 30px;
+  right: 0px;
+  width: 325px;
+  height: calc(100vh - 30px);
+  background-color: #eee;
+  color: #444;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 12.5px;
+  overflow-y: auto;
+  z-index: 9;
+}
+
+.right-panel {
+  position: absolute;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  z-index: 9;
+}
+
+.right-panel-resizer,
+.outliner-resizer {
+  touch-action: none;
+}
+
+.panel-tabs {
+  font-size: 0;
+  background-color: #ffffff;
+  border-top: 1px solid #ccc;
+}
+
+.tab {
+  flex: 1;
+  padding: 9.5px;
+  background: none;
+  border: none;
+  border-right: 1px solid #ccc;
+  font-weight: 500;
+  color: #666;
+  font-size: 14px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.tab:hover {
+  background-color: #f1f3f5;
+  color: #111;
+}
+
+.tab.active {
+  background-color: #eee;
+}
+
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.panel-divider {
+  height: 1px;
+  margin: 0px;
+  width: 100%;
+  background-color: #ccc;
+}
+
+.project-settings-list {
+  list-style: none;
+  padding: 8px 10px;
+  margin: 0px 0px;
+  font-size: 14px;
+}
+
+.setting-option {
+  display: flex;
+  align-items: center;
+  padding: 6px 0px ;
+}
+
+.setting-option .label {
+  min-width: 125px;
+  max-width: 125px;
+}
+
+.setting-option {
+  display: flex;
+  align-items: center;
+}
+
+.setting-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+select {
+  padding: 1px 30px 1px 1px;
+  font-size: 14px;
+  border-radius: 0px;
+  color: #666;
+  background-color: #fff;
+  margin-left: 5px;
+  border: 0px;
+}
+
+select:hover {
+  background-color: #f8f8f8;
+  color: #111;
+  cursor: pointer;
+}
+
+select:focus {
+  outline: none;
+  background-color: #fff;
+  color: #111;
+}
+
+#title {
+  max-width: 150px;
+  border: none;
+  border-radius: 0px;
+  padding: 3px 3.5px;
+  color: #444;
+}
+
+#title:focus {
+  outline: none;
+}
+
+.action-button {
+  display: block;
+  font-size: 13px;
+  color: #555;
+  background-color: #ddd;
+  width: 170px;
+  border: none;
+  cursor: pointer;
+  padding: 3.5px 0px;
+}
+
+.action-button:hover {
+  background-color: white;
+  color: #111;
+}
+
+#restore-shortcuts-btn {
+  margin-left: auto;
+}
+
+.setting-option .number {
+  width: 4ch;
+  padding: 2px;
+  margin: 0px 5px;
+  font-size: 12.5px;
+  color: #08f;
+  background-color: #ffffff00;
+  text-align: left;
+  border: none;
+}
+
+.setting-option .number:focus {
+  background-color: white;
+  outline: none;
+}
+
+.setting-option .number::-webkit-outer-spin-button,
+.setting-option .number::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.setting-option .key-input {
+  width: 80px;
+  padding: 4px 5px;
+  font-size: 12.5px;
+  color: #444;
+  background-color: white;
+  text-align: center;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s, outline 0.15s;
+}
+
+.setting-option .key-input:focus {
+  background-color: white;
+  outline: none;
+}
+
+.setting-option .key-input.capturing {
+  color: #08f;
+  outline: 1px solid #08f;
+}
+
+.shortcuts-scroll {
+  max-height: 245px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid #ccc;
+  margin: 0px 0px 5px 0px;
+}
+
+.shortcuts-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.shortcuts-scroll::-webkit-scrollbar-thumb {
+  background-color: #aaa;
+  border-radius: 4px;
+}
+
+.shortcut-error-msg {
+  color: #e05;
+  font-size: 11.5px;
+}
+
+.key-input.conflict {
+  color: #e05;
+  background-color: #fff0f3;
+}

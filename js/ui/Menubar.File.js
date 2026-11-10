@@ -1,0 +1,197 @@
+import * as THREE from 'three';
+import { Loader } from '../io/loaders/Loader.js';
+import { MeshExporter } from '../io/exporters/MeshExporter.js';
+import { TextureExporter } from '../io/exporters/TextureExporter.js';
+
+export class MenubarFile {
+  constructor(editor) {
+    this.editor = editor;
+    this.signals = editor.signals;
+    this.sceneManager = editor.sceneManager;
+    this.objectFactory = editor.objectFactory;
+    this.selection = editor.selection;
+    this.toolbar = editor.toolbar;
+    this.init(editor);
+  }
+
+  init(editor) {
+    document.querySelectorAll('[data-new]').forEach(item => {
+      item.addEventListener('click', (event) => {
+        const sceneType = event.target.getAttribute('data-new');
+        this.tryCreateScene(sceneType);
+      });
+    });
+
+    document.querySelector('.open').addEventListener('click', () => {
+      this.openProject(editor);
+    });
+
+    document.querySelector('.local-save').addEventListener('click', () => {
+      this.saveProject(editor);
+    });
+
+    document.querySelector('.import').addEventListener('click', () => {
+      this.importObject(editor);
+    });
+
+    document.querySelectorAll('[data-export]').forEach(item => {
+      item.addEventListener('click', (event) => {
+        const exportFormat = event.target.getAttribute('data-export');
+        this.exportObject(editor, exportFormat);
+      });
+    });
+
+    document.querySelector('.export-textures').addEventListener('click', () => {
+      this.exportTextures(editor);
+    });
+  }
+
+  tryCreateScene(type) {
+    const confirmed = window.confirm('Any unsaved data will be lost. Continue?');
+    if (confirmed) {
+      this.createScene(type);
+    }
+  }
+
+  createScene(type) {
+    this.selection.deselect();
+
+    const projectId = this.generateUUID();
+    this.editor.currentProjectId = projectId;
+    this.editor.currentProjectName = null;
+    history.replaceState(null, '', `/`);
+
+    switch (type) {
+      case 'empty':
+        this.sceneManager.emptyAllScenes();
+        this.signals.sceneGraphChanged.dispatch();
+        break;
+      case 'cube': {
+        this.sceneManager.emptyAllScenes();
+        const cube = this.objectFactory.createGeometry('Cube');
+        this.sceneManager.addObject(cube);
+        this.signals.sceneGraphChanged.dispatch();
+        break;
+      }
+      case 'torus': {
+        this.sceneManager.emptyAllScenes();
+        const cube = this.objectFactory.createGeometry('Torus');
+        this.sceneManager.addObject(cube);
+        this.signals.sceneGraphChanged.dispatch();
+        break;
+      }
+      case 'camera': {
+        this.sceneManager.emptyAllScenes();
+        const cube = this.objectFactory.createGeometry('Cube');
+        this.sceneManager.addObject(cube);
+        const camera = this.objectFactory.createCamera('Perspective', this.sceneManager);
+        camera.position.set(0, 0, 10);
+        this.sceneManager.addObject(camera);
+        this.signals.sceneGraphChanged.dispatch();
+        break;
+      }
+    }
+
+    this.toolbar.updateTools();
+  }
+
+  openProject(editor) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+
+    input.addEventListener('change', async () => {
+      const file = input.files[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const json = JSON.parse(text);
+
+        this.sceneManager.emptyAllScenes();
+        editor.fromJSON(json);
+        requestAnimationFrame(() => editor.panelResizer.onWindowResize());
+
+        history.replaceState(null, '', `/`);
+        console.log(`Project loaded: ${file.name}`);
+      } catch (e) {
+        console.error('Failed to open project:', e);
+        alert('Failed to open project.');
+      }
+    });
+
+    input.click();
+  }
+
+  saveProject(editor, filename = 'project.json') {
+    try {
+      const json = editor.toJSON();
+      const blob = new Blob([JSON.stringify(json)], { type: 'application/json' });
+
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+
+      console.log(`Project saved as ${filename}`);
+    } catch (e) {
+      console.error('Failed to save project:', e);
+      alert('Failed to save project.');
+    }
+  }
+
+  importObject(editor) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.obj, .glb, .gltf, .bin';
+    input.multiple = true;
+    input.addEventListener('change', (event) => {
+      const files = Array.from(event.target.files);
+      if (!files.length) return;
+
+      const loader = new Loader(editor);
+      for (const file of files) {
+        const extension = file.name.split('.').pop().toLowerCase();
+        if (extension === 'bin') continue;
+
+        const siblingFiles = files.filter(f => f !== file);
+        loader.load(file, siblingFiles);
+      }
+    });
+
+    input.click();
+  }
+
+  exportObject(editor, format) {
+    const objects = this.selection.selectedObjects;
+    const exporter = new MeshExporter(editor);
+
+    if (!objects || objects.length === 0) {
+      alert('Please select an object to export.');
+      return;
+    }
+    exporter.export(objects, format);
+  }
+
+  exportTextures(editor) {
+    const objects = this.selection.selectedObjects;
+    const exporter = new TextureExporter(editor);
+
+    if (!objects || objects.length === 0) {
+      alert('Please select an object to export.');
+      return;
+    }
+    exporter.exportTextures(objects);
+  }
+
+  generateUUID() {
+    if (crypto?.randomUUID) return crypto.randomUUID();
+    // fallback for non-secure contexts
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+}

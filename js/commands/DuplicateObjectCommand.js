@@ -1,0 +1,116 @@
+import * as THREE from 'three';
+
+export class DuplicateObjectCommand {
+  static type = 'DuplicateObjectCommand';
+
+  /**
+   * @param {Editor} editor
+   * @param {THREE.Object3D[]} originals
+   * @param {THREE.Object3D[]} duplicates
+   * @constructor
+   */
+  constructor(editor, originals = [], duplicates = []) {
+    this.editor = editor;
+    this.name = 'Duplicate Objects';
+    this.vertexEditor = editor.vertexEditor;
+
+    this.originalUuids = originals.map(object => object.uuid);
+
+    this.duplicateStates = duplicates.map(duplicate => ({
+      uuid: duplicate.uuid,
+      json: duplicate.toJSON()
+    }));
+
+    this.prevSelection = editor.selection.selectedObjects.map(o => o.uuid);
+  }
+
+  execute() {
+    const sceneManager = this.editor.sceneManager;
+    const loader = new THREE.ObjectLoader();
+    const created = [];
+
+    // Create all duplicates
+    for (let i = 0; i < this.duplicateStates.length; i++) {
+      const state = this.duplicateStates[i];
+      const obj = loader.parse(state.json);
+      obj.uuid = state.uuid;
+
+      if (obj.userData?.isImageRef && obj.material) {
+        obj.material.allowOverride = false;
+      }
+      
+      created[i] = obj;
+    }
+
+    // Attach with correct hierarchy
+    const attached = [];
+
+    for (let i = 0; i < this.originalUuids.length; i++) {
+      const original = this.editor.objectByUuid(this.originalUuids[i]);
+      if (!original) continue;
+
+      const duplicate = created[i];
+      if (!duplicate) continue;
+
+      const originalParent = original.parent;
+      let parent = sceneManager.mainScene;
+
+      if (originalParent) {
+        const parentIndex = this.originalUuids.indexOf(originalParent.uuid);
+        parent = (parentIndex !== -1) ? created[parentIndex] : originalParent;
+      }
+
+      sceneManager.attachObjectLocal(duplicate, parent);
+
+      sceneManager.addHelper(duplicate);
+      sceneManager.addCamera(duplicate);
+
+      duplicate.traverse(child => {
+        if (child.isMesh && ! child.userData?.isImageRef ) {
+          this.vertexEditor.setObject(child);
+          this.vertexEditor.updateGeometryAndHelpers();
+        }
+      });
+
+      attached.push(duplicate);
+    }
+
+    this.editor.selection.setSelection(attached);
+    this.editor.toolbar.updateTools();
+  }
+
+  undo() {
+    const sceneManager = this.editor.sceneManager;
+
+    for (const { uuid } of this.duplicateStates) {
+      const obj = this.editor.objectByUuid(uuid);
+      if (obj) sceneManager.removeObject(obj);
+    }
+
+    const prev = this.prevSelection
+      .map(uuid => this.editor.objectByUuid(uuid)).filter(Boolean);
+
+    this.editor.selection.setSelection(prev);
+    this.editor.toolbar.updateTools();
+  }
+
+  toJSON() {
+    return {
+      type: DuplicateObjectCommand.type,
+      originalUuids: this.originalUuids,
+      duplicateStates: this.duplicateStates,
+      prevSelection: [...this.prevSelection]
+    };
+  }
+
+  static fromJSON(editor, json) {
+    if (!json || json.type !== DuplicateObjectCommand.type) return null;
+
+    const cmd = new DuplicateObjectCommand(editor);
+    cmd.originalUuids = json.originalUuids ?? [];
+    cmd.duplicateStates = json.duplicateStates ?? [];
+    cmd.prevSelection = json.prevSelection ?? [];
+
+    return cmd;
+  }
+}

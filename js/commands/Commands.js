@@ -1,0 +1,115 @@
+import { SetPositionCommand } from './SetPositionCommand.js';
+import { SetRotationCommand } from './SetRotationCommand.js';
+import { SetScaleCommand } from './SetScaleCommand.js';
+import { AddObjectCommand } from './AddObjectCommand.js';
+import { RemoveObjectCommand } from './RemoveObjectCommand.js';
+import { MoveObjectCommand } from './MoveObjectCommand.js';
+import { SetValueCommand } from './SetValueCommand.js';
+import { SetColorCommand } from './SetColorCommand.js';
+import { SetShadowValueCommand } from './SetShadowValueCommand.js';
+import { SetMaterialValueCommand } from './SetMaterialValueCommand.js';
+import { SetMaterialColorCommand } from './SetMaterialColorCommand.js';
+import { SetVertexPositionCommand } from './SetVertexPositionCommand.js';
+import { SwitchModeCommand } from './SwitchModeCommand.js';
+import { SetShadingCommand } from './SetShadingCommand.js';
+import { ExtrudeCommand } from './ExtrudeCommand.js';
+import { CreateFaceCommand } from './CreateFaceCommand.js';
+import { DeleteSelectionCommand } from './DeleteSelectionCommand.js';
+import { SeparateSelectionCommand } from './SeparateSelectionCommand.js';
+import { LoopCutCommand } from './LoopCutCommand.js';
+import { KnifeCommand } from './KnifeCommand.js';
+import { SwitchSubModeCommand } from './SwitchSubModeCommand.js';
+import { MultiCommand } from './MultiCommand.js';
+import { JoinObjectsCommand } from './JoinObjectsCommand.js';
+import { SequentialMultiCommand } from './SequentialMultiCommand.js';
+import { DuplicateObjectCommand } from './DuplicateObjectCommand.js';
+import { DuplicateSelectionCommand } from './DuplicateSelectionCommand.js';
+import { MergeSelectionCommand } from './MergeSelectionCommand.js';
+import { SplitSelectionCommand } from './SplitSelectionCommand.js';
+import { SetOriginToGeometryCommand } from './SetOriginToGeometryCommand.js';
+import { SetGeometryToOriginCommand } from './SetGeometryToOriginCommand.js';
+import { BevelCommand } from './BevelCommand.js';
+import { InsetCommand } from './InsetCommand.js';
+import { ApplyLocationCommand } from './ApplyLocationCommand.js';
+import { ApplyRotationCommand } from './ApplyRotationCommand.js';
+import { ApplyScaleCommand } from './ApplyScaleCommand.js';
+import { EdgeSlideCommand } from './EdgeSlideCommand.js';
+import { FlipNormalsCommand } from './FlipNormalsCommand.js';
+import { SubdivideSelectionCommand } from './SubdivideSelectionCommand.js';
+import { UnionCommand } from './UnionCommand.js';
+import { DifferenceCommand } from './DifferenceCommand.js';
+import { IntersectCommand } from './IntersectCommand.js';
+import { SetMaterialCommand } from './SetMaterialCommand.js';
+import { SetUserDataValueCommand } from './SetUserDataValueCommand.js';
+import { SetVisibilityCommand } from './SetVisibilityCommand.js';
+import { PaintStrokeCommand } from './PaintStrokeCommand.js';
+import { SetMaterialMapCommand } from './SetMaterialMapCommand.js';
+import { SwitchPaintMapCommand } from './SwitchPaintMapCommand.js';
+import { BridgeSelectionCommand } from './BridgeSelectionCommand.js';
+import { SetSeamCommand } from './SetSeamCommand.js';
+import { SetUVsCommand } from './SetUVsCommand.js';
+import { SetUVPositionCommand } from './SetUVPositionCommand.js';
+import { ApplyMirrorCommand } from './ApplyMirrorCommand.js';
+import { SetMirrorCommand } from './SetMirrorCommand.js';
+import { SetSelectionCommand } from './SetSelectionCommand.js';
+import { SetEditSelectionCommand } from './SetEditSelectionCommand.js';
+import { SetSharpCommand } from './SetSharpCommand.js';
+
+export const commands = new Map([
+  [SetPositionCommand.type, SetPositionCommand],
+  [SetRotationCommand.type, SetRotationCommand],
+  [SetScaleCommand.type, SetScaleCommand],
+  [AddObjectCommand.type, AddObjectCommand],
+  [RemoveObjectCommand.type, RemoveObjectCommand],
+  [MoveObjectCommand.type, MoveObjectCommand],
+  [SetValueCommand.type, SetValueCommand],
+  [SetColorCommand.type, SetColorCommand],
+  [SetShadowValueCommand.type, SetShadowValueCommand],
+  [SetMaterialValueCommand.type, SetMaterialValueCommand],
+  [SetMaterialColorCommand.type, SetMaterialColorCommand],
+  [SetVertexPositionCommand.type, SetVertexPositionCommand],
+  [SwitchModeCommand.type, SwitchModeCommand],
+  [SetShadingCommand.type, SetShadingCommand],
+  [ExtrudeCommand.type, ExtrudeCommand],
+  [CreateFaceCommand.type, CreateFaceCommand],
+  [DeleteSelectionCommand.type, DeleteSelectionCommand],
+  [SeparateSelectionCommand.type, SeparateSelectionCommand],
+  [LoopCutCommand.type, LoopCutCommand],
+  [KnifeCommand.type, KnifeCommand],
+  [SwitchSubModeCommand.type, SwitchSubModeCommand],
+  [MultiCommand.type, MultiCommand],
+  [JoinObjectsCommand.type, JoinObjectsCommand],
+  [SequentialMultiCommand.type, SequentialMultiCommand],
+  [DuplicateObjectCommand.type, DuplicateObjectCommand],
+  [DuplicateSelectionCommand.type, DuplicateSelectionCommand],
+  [MergeSelectionCommand.type, MergeSelectionCommand],
+  [SplitSelectionCommand.type, SplitSelectionCommand],
+  [SetOriginToGeometryCommand.type, SetOriginToGeometryCommand],
+  [SetGeometryToOriginCommand.type, SetGeometryToOriginCommand],
+  [BevelCommand.type, BevelCommand],
+  [InsetCommand.type, InsetCommand],
+  [ApplyLocationCommand.type, ApplyLocationCommand],
+  [ApplyRotationCommand.type, ApplyRotationCommand],
+  [ApplyScaleCommand.type, ApplyScaleCommand],
+  [EdgeSlideCommand.type, EdgeSlideCommand],
+  [FlipNormalsCommand.type, FlipNormalsCommand],
+  [SubdivideSelectionCommand.type, SubdivideSelectionCommand],
+  [UnionCommand.type, UnionCommand],
+  [DifferenceCommand.type, DifferenceCommand],
+  [IntersectCommand.type, IntersectCommand],
+  [SetMaterialCommand.type, SetMaterialCommand],
+  [SetUserDataValueCommand.type, SetUserDataValueCommand],
+  [SetVisibilityCommand.type, SetVisibilityCommand],
+  [PaintStrokeCommand.type, PaintStrokeCommand],
+  [SetMaterialMapCommand.type, SetMaterialMapCommand],
+  [SwitchPaintMapCommand.type, SwitchPaintMapCommand],
+  [BridgeSelectionCommand.type, BridgeSelectionCommand],
+  [SetSeamCommand.type, SetSeamCommand],
+  [SetUVsCommand.type, SetUVsCommand],
+  [SetUVPositionCommand.type, SetUVPositionCommand],
+  [ApplyMirrorCommand.type, ApplyMirrorCommand],
+  [SetMirrorCommand.type, SetMirrorCommand],
+  [SetSelectionCommand.type, SetSelectionCommand],
+  [SetEditSelectionCommand.type, SetEditSelectionCommand],
+  [SetSharpCommand.type, SetSharpCommand],
+]);

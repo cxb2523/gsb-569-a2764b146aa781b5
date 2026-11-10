@@ -1,0 +1,574 @@
+import * as THREE from 'three';
+import { SetSelectionCommand } from '../commands/SetSelectionCommand.js';
+
+export default class Selection {
+  constructor(editor) {
+    this.editor = editor;
+    this.signals = editor.signals;
+    this.keyHandler = editor.keyHandler;
+    this.originHelper = editor.originHelper;
+    this.selectionBoxes = new Map();
+    this.sceneManager = editor.sceneManager;
+
+    this.multiSelectEnabled = false;
+    this.selectedObjects = [];
+    this.helpers = editor.helpers;
+    this.highlightVisible = true;
+
+    this.raycaster = new THREE.Raycaster();
+    this.mouse = new THREE.Vector2();
+    this.enable = false;
+    this.tool = false;
+    this.renderer = editor.renderer;
+    this.camera = editor.cameraManager.camera;
+    this.selectionBox = editor.selectionBox;
+
+    this.pivotHandle = new THREE.Object3D();
+    this.pivotHandle.name = '__PivotHandle';
+    this.pivotHandle.visible = false;
+    this.sceneManager.sceneEditorHelpers.add(this.pivotHandle);
+
+    this.holdDelay = 500;
+    this.holdMoveThreshold = 25;
+    this.touchHoldTimer = null;
+    this.touchHoldActive = false;
+    this.touchStartClient = null;
+    this.lastTouchEndTime = 0;
+
+    this.setupListeners();
+  }
+
+  setupListeners() {
+    this.signals.viewportCameraChanged.add((camera) => {
+      if (camera.isDefault) {
+        this.camera = camera;
+      }
+    });
+
+    this.signals.emptyScene.add(() => {
+      this.deselect();
+    });
+
+    this.signals.multiSelectChanged.add((shiftChanged) => {
+      this.multiSelectEnabled = shiftChanged;
+    });
+
+    this.signals.transformDragStarted.add((mode) => {
+      if (mode !== 'object') return;
+      this.enable = false;
+    });
+
+    this.signals.transformDragEnded.add((mode) => {
+      if (mode !== 'object') return;
+      this.enable = true;
+    });
+
+    const dom = this.renderer.domElement;
+    dom.addEventListener("mousedown", this.onMouseDown.bind(this));
+    dom.addEventListener("mousemove", this.onMouseMove.bind(this));
+    dom.addEventListener("mouseup", this.onMouseUp.bind(this));
+
+    dom.addEventListener("touchstart", this.onTouchStart.bind(this), { passive: false });
+    dom.addEventListener("touchmove", this.onTouchMove.bind(this), { passive: false });
+    dom.addEventListener("touchend", this.onTouchEnd.bind(this));
+    dom.addEventListener("touchcancel", this.onTouchCancel.bind(this));
+  }
+
+  onMouseDown(event) {
+    if (!this.enable || event.button !== 0) return;
+    if (Date.now() - this.lastTouchEndTime < 600) return;
+    if (!this.keyHandler.startInteraction('select')) return;
+
+    this.dragging = false;
+    this.mouseDownPos = { x: event.clientX, y: event.clientY };
+  }
+
+  onMouseMove(event) {
+    if (!this.enable || !this.mouseDownPos) return;
+    if (this.keyHandler.activeInteraction !== 'select') return;
+    
+    const dx = event.clientX - this.mouseDownPos.x;
+    const dy = event.clientY - this.mouseDownPos.y;
+    const dragThreshold = 5;
+
+    if (!this.dragging && Math.hypot(dx, dy) > dragThreshold) {
+      this.dragging = true;
+      this.selectionBox.startSelection(event.clientX, event.clientY);
+    }
+
+    if (this.dragging) {
+      this.selectionBox.updateSelection(event.clientX, event.clientY);
+    }
+  }
+
+  onMouseUp(event) {
+    if (!this.enable || event.button !== 0) return;
+    if (!this.mouseDownPos) return;
+
+    this.keyHandler.endInteraction('select');
+    this.selectionBox.finishSelection();
+
+    const isBox = this.dragging;
+    const hits = isBox ? this.getBoxSelectedObjects() : this.getSingleSelectedObject(event);
+    this.commitSelection(() => this.applyPick(hits, isBox));
+
+    this.dragging = false;
+    this.mouseDownPos = null;
+  }
+
+  // Touch handlers
+  onTouchStart(event) {
+    if (!this.enable) return;
+
+    if (event.touches.length !== 1) {
+      this.cancelTouchHold();
+      return;
+    }
+
+    const touch = event.touches[0];
+    this.touchStartClient = { x: touch.clientX, y: touch.clientY };
+    this.touchHoldActive = false;
+    this.dragging = false;
+
+
+    clearTimeout(this.touchHoldTimer);
+    this.touchHoldTimer = setTimeout(() => {
+      this.activateTouchHold();
+    }, this.holdDelay);
+  }
+
+  activateTouchHold() {
+    if (!this.enable || !this.touchStartClient) return;
+
+    const current = this.keyHandler.activeInteraction;
+    if (current && current !== 'box-select') {
+      this.keyHandler.endInteraction(current);
+    }
+    this.keyHandler.startInteraction('box-select');
+
+    this.touchHoldActive = true;
+    this.mouseDownPos = { x: this.touchStartClient.x, y: this.touchStartClient.y };
+  }
+
+  onTouchMove(event) {
+    if (!this.enable || !this.touchStartClient) return;
+
+    if (event.touches.length !== 1) {
+      this.cancelTouchHold();
+      return;
+    }
+
+    const touch = event.touches[0];
+    const dx = touch.clientX - this.touchStartClient.x;
+    const dy = touch.clientY - this.touchStartClient.y;
+
+    if (!this.touchHoldActive) {
+      if (Math.hypot(dx, dy) > this.holdMoveThreshold) {
+        this.cancelTouchHold();
+      }
+      return;
+    }
+
+    event.preventDefault();
+
+    const dragThreshold = 5;
+    if (!this.dragging && Math.hypot(dx, dy) > dragThreshold) {
+      this.dragging = true;
+      this.selectionBox.startSelection(this.mouseDownPos.x, this.mouseDownPos.y);
+    }
+
+    if (this.dragging) {
+      this.selectionBox.updateSelection(touch.clientX, touch.clientY);
+    }
+  }
+
+  onTouchEnd(event) {
+    this.lastTouchEndTime = Date.now();
+    clearTimeout(this.touchHoldTimer);
+    this.touchHoldTimer = null;
+
+    if (!this.touchStartClient) return;
+
+    if (this.touchHoldActive) {
+      this.keyHandler.endInteraction('box-select');
+      this.selectionBox.finishSelection();
+    }
+
+    const touch = event.changedTouches[0];
+    const isBox = this.dragging;
+    const hits = isBox ? this.getBoxSelectedObjects()
+      : (touch ? this.getSingleSelectedObject({ clientX: touch.clientX, clientY: touch.clientY }) : null);
+
+    this.commitSelection(() => this.applyPick(hits, isBox));
+    this.resetTouchState();
+  }
+
+  onTouchCancel() {
+    this.lastTouchEndTime = Date.now();
+    this.cancelTouchHold();
+  }
+
+  cancelTouchHold() {
+    clearTimeout(this.touchHoldTimer);
+    this.touchHoldTimer = null;
+
+    if (this.touchHoldActive) {
+      this.keyHandler.endInteraction('box-select');
+      this.selectionBox.finishSelection();
+    }
+
+    this.resetTouchState();
+  }
+
+  resetTouchState() {
+    this.touchHoldActive = false;
+    this.touchStartClient = null;
+    this.dragging = false;
+    this.mouseDownPos = null;
+  }
+
+  getSingleSelectedObject(event) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const objects = this.getPickableObjects();
+    const intersects = this.raycaster.intersectObjects(objects, false);
+    if (intersects.length === 0) return null;
+
+    const object = intersects[0].object;
+    const target = object.userData.object || object;
+
+    return target;
+  }
+
+  getBoxSelectedObjects() {
+    const frustum = this.selectionBox.computeFrustumFromSelection();
+    if (!frustum) return null;
+
+    const objects = this.getPickableObjects();
+    const objectHits = this.selectionBox.getObjectsInFrustum(objects, frustum);
+    if (!objectHits || objectHits.length === 0) return null;
+
+    const selectedObjects = [...new Set(objectHits.map(h => h.object))];
+    return selectedObjects;
+  }
+
+  getPickableObjects() {
+    const objects = [];
+
+    this.sceneManager.mainScene.traverseVisible(child => {
+      if (!child.visible) return;
+      if (child.userData.selectable === false) return;
+
+      const owner = child.userData.object;
+      if (owner && (!owner.visible || !owner.parent)) return;
+
+      objects.push(child);
+    });
+
+    this.sceneManager.sceneHelpers.traverseVisible(child => {
+      if (child.name === 'picker') {
+        if (child.userData.selectable === false) return;
+        objects.push(child);
+      }
+    });
+
+    return objects;
+  }
+
+  setHighlightVisible(visible) {
+    if (this.highlightVisible === visible) return;
+    this.highlightVisible = visible;
+
+    if (visible) {
+      for (const obj of this.selectedObjects) this.highlightObject(obj);
+    } else {
+      this.clearHighlight();
+    }
+    this.updatePivotHandle();
+  }
+
+  update() {
+    if (!this.highlightVisible || this.selectedObjects.length === 0) return;
+
+    // Update each selected object
+    for (const object of this.selectedObjects) {
+      const helper = this.helpers[object.id];
+      
+      if (helper) {
+        helper.update();
+
+        // Highlight helper
+        helper.traverse(child => {
+          if (child.material?.color) {
+            child.material.color.set(0xffa500);
+          }
+        });
+      } else {
+        // Normal mesh selection: update box helper
+        let boxHelper = this.selectionBoxes.get(object.id);
+        if (!boxHelper) {
+          const box = new THREE.Box3();
+          boxHelper = new THREE.Box3Helper(box, 0xffa500);
+          boxHelper.material.depthTest = false;
+          boxHelper.material.transparent = true;
+          this.sceneManager.sceneEditorHelpers.add(boxHelper);
+          this.selectionBoxes.set(object.id, boxHelper);
+        }
+
+        this.fitBoxHelper(object, boxHelper);
+      }
+    }
+
+    // Hide any box helpers that are no longer selected
+    for (const [id, boxHelper] of this.selectionBoxes) {
+      if (!this.selectedObjects.find(obj => obj.id === id)) {
+        boxHelper.visible = false;
+      }
+    }
+
+    this.originHelper.updateOrginHelpers(this.selectedObjects);
+  }
+
+  getSelectedObject() {
+    return this.selectedObjects;
+  }
+
+  deselect() {
+    this.clearHighlight();
+    this.selectedObjects = [];
+    this.updatePivotHandle();
+    this.dragging = false;
+    this.mouseDownPos = null;
+    
+    this.signals.objectSelected.dispatch([]);
+  }
+
+  clearHighlight() {
+    for (const object of this.selectedObjects) {
+      const helper = this.helpers[object.id];
+      if (helper) {
+        helper.traverse(child => {
+          if (child.material && child.material.color) {
+            child.material.color.set(object.userData.originalColor || 0xffffff);
+          }
+        });
+      }
+
+      const boxHelper = this.selectionBoxes.get(object.id);
+      if (boxHelper) {
+        boxHelper.visible = false;
+      }
+
+      this.originHelper.removeOriginHelper(object);
+    }
+  }
+
+  select(objects, isBoxSelection = false) {
+    const isArray = Array.isArray(objects);
+    if (!isArray) objects = [objects];
+
+    objects = objects.filter(o => o);
+
+    if (this.multiSelectEnabled) {
+
+      if (isBoxSelection) {
+        // Box selection: add only
+        for (const obj of objects) {
+          if (!this.selectedObjects.includes(obj)) {
+            this.selectedObjects.push(obj);
+            this.highlightObject(obj);
+          }
+        }
+      } else {
+        // Click selection: toggle
+        for (const obj of objects) {
+          const i = this.selectedObjects.indexOf(obj);
+
+          if (i !== -1) {
+            this.selectedObjects.splice(i, 1);
+            this.unhighlightObject(obj);
+          } else {
+            this.selectedObjects.push(obj);
+            this.highlightObject(obj);
+          }
+        }
+      }
+
+      // If everything got toggled off
+      if (this.selectedObjects.length === 0) {
+        this.deselect();
+        return;
+      }
+
+      this.updatePivotHandle();
+      this.signals.objectSelected.dispatch(this.selectedObjects);
+      return;
+    }
+
+    // Click selection (no shift)
+    this.clearHighlight();
+    this.selectedObjects = [...objects];
+    for (const obj of this.selectedObjects) {
+      this.highlightObject(obj);
+    }
+
+    this.updatePivotHandle();
+    this.signals.objectSelected.dispatch(this.selectedObjects);
+  }
+
+  setSelection(objects) {
+    this.clearHighlight();
+    this.selectedObjects = [...new Set(objects.filter(Boolean))];
+
+    for (const obj of this.selectedObjects) {
+      this.highlightObject(obj);
+    }
+
+    this.updatePivotHandle();
+    this.signals.objectSelected.dispatch(this.selectedObjects);
+  }
+
+  commitSelection(applyFn) {
+    const before = [...this.selectedObjects];
+    applyFn();
+    const after = [...this.selectedObjects];
+
+    const same = before.length === after.length && before.every((o, i) => o === after[i]);
+    if (same) return;
+
+    this.editor.history.add(new SetSelectionCommand(this.editor, after, before));
+  }
+
+  applyPick(hits, isBoxSelection) {
+    const empty = hits === null || (Array.isArray(hits) && hits.length === 0);
+    if (empty && !this.multiSelectEnabled) {
+      this.deselect();
+      return;
+    }
+    this.select(hits, isBoxSelection);
+  }
+
+  highlightObject(object) {
+    if (!this.highlightVisible) return;
+    const helper = this.helpers[object.id];
+
+    if (helper) {
+      helper.update();
+      helper.traverse(child => {
+        if (child.material?.color) {
+          child.material.color.set(0xffa500);
+        }
+      });
+    } else {
+      if (!this.selectionBoxes.has(object.id)) {
+        const box = new THREE.Box3();
+        const boxHelper = new THREE.Box3Helper(box, 0xffa500);
+        boxHelper.material.depthTest = false;
+        boxHelper.material.transparent = true;
+        this.sceneManager.sceneEditorHelpers.add(boxHelper);
+        this.selectionBoxes.set(object.id, boxHelper);
+      }
+
+      const boxHelper = this.selectionBoxes.get(object.id);
+      boxHelper.box.setFromObject(object);
+      boxHelper.visible = true;
+      boxHelper.updateMatrixWorld(true);
+    }
+
+    this.originHelper.addOriginHelper(object);
+  }
+
+  unhighlightObject(object) {
+    const helper = this.helpers[object.id];
+    if (helper) {
+      helper.traverse(child => {
+        if (child.material?.color) {
+          child.material.color.set(0xffffff);
+        }
+      });
+    }
+
+    if (this.selectionBoxes.has(object.id)) {
+      const boxHelper = this.selectionBoxes.get(object.id);
+      boxHelper.visible = false;
+    }
+
+    this.originHelper.removeOriginHelper(object);
+  }
+
+  isVisibleInWorld(object) {
+    for (let o = object; o; o = o.parent) {
+      if (!o.visible) return false;
+    }
+    return true;
+  }
+
+  fitBoxHelper(object, boxHelper) {
+    boxHelper.box.setFromObject(object);
+    this.editor.mirrorManager?.expandWorldBox(object, boxHelper.box);
+    boxHelper.visible = this.isVisibleInWorld(object);
+    boxHelper.updateMatrixWorld(true);
+  }
+
+  updatePivotHandle() {
+    if (!this.highlightVisible || this.selectedObjects.length === 0) {
+      this.pivotHandle.visible = false;
+      return;
+    }
+    const rootObjects = this.getRootSelectedObjects();
+
+    const sum = new THREE.Vector3();
+    const worldPos = new THREE.Vector3();
+
+    for (const obj of rootObjects) {
+      obj.getWorldPosition(worldPos);
+      sum.add(worldPos);
+    }
+
+    sum.divideScalar(rootObjects.length);
+    this.pivotHandle.position.copy(sum);
+    this.pivotHandle.visible = true;
+  }
+
+  getRootSelectedObjects() {
+    const objects = this.selectedObjects;
+    const set = new Set(objects);
+
+    return objects.filter(obj => {
+      let p = obj.parent;
+      while (p) {
+        if (set.has(p)) return false;
+        p = p.parent;
+      }
+      return true;
+    });
+  }
+
+  getAffectedObjects() {
+    const objects = this.selectedObjects;
+    const set = new Set();
+
+    for (const obj of objects) {
+      obj.traverse(o => {
+        set.add(o);
+      });
+    }
+
+    return set;
+  }
+
+  toJSON() {
+    return this.selectedObjects.map(o => o.uuid);
+  }
+
+  fromJSON(json) {
+    const objects = (json ?? [])
+      .map(uuid => this.editor.objectByUuid(uuid))
+      .filter(Boolean);
+    
+    this.setSelection(objects);
+  }
+}

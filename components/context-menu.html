@@ -1,0 +1,187 @@
+<div class="context-menu-wrapper">
+  <ul class="context-menu" role="menu">
+    <div class="menu-section" data-mode="object">
+      <li class="menu-title">Object Context Menu</li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" data-action="center-object">Center</li>
+      <li class="item" role="menu-item" class="submenu-item">
+        Set Origin
+        <span class="arrow">&#9656;</span>
+        <ul class="submenu right">
+          <li class="item" role="menu-item" data-action="geometry-origin">Geometry to Origin</li>
+          <li class="item" role="menu-item" data-action="origin-geometry">Origin to Geometry</li>
+        </ul>
+      </li>
+      <li class="item" role="menu-item" data-action="duplicate-object">Duplicate
+        <span class="shortcut" data-shortcut-key="duplicate"></span>
+      </li>
+      <li class="item" role="menu-item" data-action="join-object">Join
+        <span class="shortcut" data-shortcut-key="join">CTRL+J</span>
+      </li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" data-action="copy-objects">Copy Objects
+        <span class="shortcut" data-shortcut-combo="ctrl+c"></span>
+      </li>
+      <li class="item" role="menu-item" data-action="paste-objects">Paste Objects
+        <span class="shortcut" data-shortcut-combo="ctrl+v"></span>
+      </li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" class="submenu-item">
+        Shade
+        <span class="arrow">&#9656;</span>
+        <ul class="submenu right">
+          <li class="item" role="menu-item" data-action="shade-smooth">Shade Smooth</li>
+          <li class="item" role="menu-item" data-action="shade-flat">Shade Flat</li>
+          <li class="item" role="menu-item" data-action="shade-auto">Shade Auto</li>
+        </ul>
+      </li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" data-action="delete-object">Delete
+        <span class="shortcut">DEL</span>
+      </li>
+    </div>
+
+    <div class="menu-section" data-mode="apply">
+      <li class="menu-title">Apply</li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" data-action="apply-location">Location</li>
+      <li class="item" role="menu-item" data-action="apply-rotation">Rotation</li>
+      <li class="item" role="menu-item" data-action="apply-scale">Scale</li>
+      <li class="item" role="menu-item" data-action="apply-transform">Transform</li>
+    </div>
+
+    <div class="menu-section" data-mode="add">
+      <li class="menu-title">Add</li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" class="submenu-item">
+        Mesh
+        <span class="arrow">&#9656;</span>
+        <ul class="submenu right">
+          <li class="item" role="menu-item" data-geometry="Plane">Plane</li>
+          <li class="item" role="menu-item" data-geometry="Cube">Cube</li>
+          <li class="item" role="menu-item" data-geometry="Circle">Circle</li>
+          <li class="item" role="menu-item" data-geometry="Sphere">Sphere</li>
+          <li class="item" role="menu-item" data-geometry="Cylinder">Cylinder</li>
+          <li class="item" role="menu-item" data-geometry="Cone">Cone</li>
+          <li class="item" role="menu-item" data-geometry="Torus">Torus</li>
+        </ul>
+      </li>
+      <li class="item" role="menu-item" class="submenu-item">
+        Light
+        <span class="arrow">&#9656;</span>
+        <ul class="submenu right">
+          <li class="item" role="menu-item" data-light="Ambient">Ambient</li>
+          <li class="item" role="menu-item" data-light="Directional">Directional</li>
+          <li class="item" role="menu-item" data-light="Hemisphere">Hemisphere</li>
+          <li class="item" role="menu-item" data-light="Point">Point</li>
+          <li class="item" role="menu-item" data-light="Spot">Spot</li>
+        </ul>
+      </li>
+      <li class="item" role="menu-item" class="submenu-item">
+        Camera
+        <span class="arrow">&#9656;</span>
+        <ul class="submenu right">
+          <li class="item" role="menu-item" data-camera="Orthographic">Orthographic</li>
+          <li class="item" role="menu-item" data-camera="Perspective">Perspective</li>
+        </ul>
+      </li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" data-group="Group">Group</li>
+      <li class="item" role="menu-item" data-image="Image">Image</li>
+    </div>
+
+    <div class="menu-section" data-mode="mesh">
+      <li class="menu-title">Mesh Context Menu</li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" data-action="subdivide-selection">Subdivide</li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" data-action="duplicate-selection">Duplicate
+        <span class="shortcut" data-shortcut-key="duplicate"></span>
+      </li>
+      <li class="item" role="menu-item" data-action="create-edge-face">New Edge/Face
+        <span class="shortcut" data-shortcut-key="createFace"></span>
+      </li>
+      <li class="item" role="menu-item" data-action="bridge-selection">Bridge Edges/Faces</li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" class="submenu-item">
+        Merge
+        <span class="shortcut" data-shortcut-key="merge">M</span>
+        <span class="arrow">&#9656;</span>
+        <ul class="submenu right">
+          <li class="item" data-action="merge-at-center">At Center</li>
+          <li class="item" data-action="merge-at-first">At First</li>
+          <li class="item" data-action="merge-at-last">At Last</li>
+          <li class="item" data-action="merge-by-distance">By Distance</li>
+        </ul>
+      </li>
+      <li class="item" role="menu-item" data-action="split-selection">Split
+        <span class="shortcut" data-shortcut-key="split"></span>
+      </li>
+      <li class="item" role="menu-item" data-action="separate-selection">Separate
+        <span class="shortcut" data-shortcut-key="separate"></span>
+      </li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" class="submenu-item">
+        Sharp
+        <span class="arrow">&#9656;</span>
+        <ul class="submenu right">
+          <li class="item" data-action="mark-sharp">Mark Sharp</li>
+          <li class="item" data-action="clear-sharp">Clear Sharp</li>
+        </ul>
+      </li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" class="submenu-item">
+        Delete
+        <span class="shortcut">DEL</span>
+        <span class="arrow">&#9656;</span>
+        <ul class="submenu right">
+          <li class="item" data-action="delete-vertices">Vertices</li>
+          <li class="item" data-action="delete-edges">Edges</li>
+          <li class="item" data-action="delete-faces">Faces</li>
+          <li class="item" data-action="delete-only-edges-faces">Only Edges & Faces</li>
+          <li class="item" data-action="delete-only-faces">Only Faces</li>
+          <li class="divider"></li>
+          <li class="item" data-action="dissolve-vertices">Dissolve Vertices</li>
+          <li class="item" data-action="dissolve-edges">Dissolve Edges</li>
+          <li class="item" data-action="dissolve-faces">Dissolve Faces</li>
+        </ul>
+      </li>
+    </div>
+
+    <div class="menu-section" data-mode="delete">
+      <li class="menu-title">Delete</li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" data-action="delete-vertices">Vertices</li>
+      <li class="item" role="menu-item" data-action="delete-edges">Edges</li>
+      <li class="item" role="menu-item" data-action="delete-faces">Faces</li>
+      <li class="item" role="menu-item" data-action="delete-only-edges-faces">Only Edges & Faces</li>
+      <li class="item" role="menu-item" data-action="delete-only-faces">Only Faces</li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" data-action="dissolve-vertices">Dissolve Vertices</li>
+      <li class="item" role="menu-item" data-action="dissolve-edges">Dissolve Edges</li>
+      <li class="item" role="menu-item" data-action="dissolve-faces">Dissolve Faces</li>
+    </div>
+
+    <div class="menu-section" data-mode="merge">
+      <li class="menu-title">Merge</li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" data-action="merge-at-center">At Center</li>
+      <li class="item" role="menu-item" data-action="merge-at-first">At First</li>
+      <li class="item" role="menu-item" data-action="merge-at-last">At Last</li>
+      <li class="item" role="menu-item" data-action="merge-by-distance">By Distance</li>
+    </div>
+
+    <div class="menu-section" data-mode="uv">
+      <li class="menu-title">UV</li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" data-action="mark-seam">Mark Seam
+        <span class="shortcut" data-shortcut-key="markSeam">SHIFT+Q</span>
+      </li>
+      <li class="item" role="menu-item" data-action="clear-seam">Clear Seam</li>
+      <li class="item" role="menu-item" data-action="clear-uv">Clear UV</li>
+      <li class="divider"></li>
+      <li class="item" role="menu-item" data-action="uv-unwrap">UV Unwrap</li>
+      <li class="item" role="menu-item" data-action="auto-uv-unwrap">Auto UV Unwrap</li>
+    </div>
+  </ul>
+</div>

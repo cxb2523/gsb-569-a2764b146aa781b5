@@ -1,0 +1,88 @@
+
+[functions.paddle-webhook]
+enabled = true
+verify_jwt = true
+import_map = "./functions/paddle-webhook/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/paddle-webhook/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/paddle-webhook/*.html" ]
+
+[functions.on-user-deleted]
+enabled = true
+verify_jwt = true
+import_map = "./functions/on-user-deleted/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/on-user-deleted/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/on-user-deleted/*.html" ]
+
+[functions.consume-credits-export]
+enabled = true
+verify_jwt = true
+import_map = "./functions/consume-credits-export/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/consume-credits-export/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/consume-credits-export/*.html" ]
+
+[functions.consume-credits-cloud-save]
+enabled = true
+verify_jwt = true
+import_map = "./functions/consume-credits-cloud-save/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/consume-credits-cloud-save/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/consume-credits-cloud-save/*.html" ]
+
+[functions.generate-texture]
+enabled = true
+verify_jwt = true
+import_map = "./functions/generate-texture/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/generate-texture/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/generate-texture/*.html" ]
+
+[functions.consume-credits-generate-texture]
+enabled = true
+verify_jwt = true
+import_map = "./functions/consume-credits-generate-texture/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/consume-credits-generate-texture/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/consume-credits-generate-texture/*.html" ]
+
+[functions.create-project]
+enabled = true
+verify_jwt = true
+import_map = "./functions/create-project/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/create-project/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/create-project/*.html" ]
+
+[functions.ai-agent]
+enabled = true
+verify_jwt = true
+import_map = "./functions/ai-agent/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/ai-agent/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/claude-agent/*.html" ]

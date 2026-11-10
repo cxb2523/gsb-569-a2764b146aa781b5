@@ -1,0 +1,272 @@
+import SidebarProperties from './Sidebar.Properties.js';
+import { MoveObjectCommand } from '../commands/MoveObjectCommand.js';
+
+export class SidebarScene {
+  constructor(editor) {
+    this.editor = editor;
+    this.signals = editor.signals;
+    this.panelResizer = editor.panelResizer;
+    this.sidebarProperties = new SidebarProperties(editor);
+    this.scene = editor.sceneManager.mainScene;
+    this.selection = editor.selection;
+    this.editSelection = editor.editSelection;
+    this.toolbar = editor.toolbar;
+    this.outlinerList = document.getElementById('outliner-list');
+
+    this.init();
+    this.rebuild();
+
+    if (this.editSelection.editedObject) {
+      this.highlightOutlinerItem([this.editSelection.editedObject]);
+    }
+  }
+
+  init() {
+    let outlinerHovered = false;
+
+    this.outlinerList.addEventListener('mouseenter', () => { outlinerHovered = true; });
+    this.outlinerList.addEventListener('mouseleave', () => { outlinerHovered = false; });
+
+    document.addEventListener('keydown', (event) => {
+      if (!outlinerHovered) return;
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+
+      event.preventDefault();
+
+      const items = [...this.outlinerList.querySelectorAll('.outliner-item')];
+      if (items.length === 0) return;
+
+      const currentIndex = items.findIndex(i => i.classList.contains('selected'));
+      let nextIndex;
+
+      if (currentIndex === -1) {
+        nextIndex = event.key === 'ArrowDown' ? 0 : items.length - 1;
+      } else {
+        nextIndex = event.key === 'ArrowDown'
+          ? Math.min(currentIndex + 1, items.length - 1)
+          : Math.max(currentIndex - 1, 0);
+      }
+
+      if (nextIndex === currentIndex) return;
+
+      items.forEach(i => i.classList.remove('selected'));
+      this.selectObjectFromOutlinerItem(items[nextIndex], { replace: true });
+      items[nextIndex].scrollIntoView({ block: 'nearest' });
+    });
+
+    this.outlinerList.addEventListener('click', (event) => {
+      if (!this.selection.enable && !this.selection.tool) return;
+
+      const item = event.target.closest('.outliner-item');
+      if (!item) {
+        if (this.selection.tool) return;
+        this.selection.commitSelection(() => this.selection.deselect());
+        this.toolbar.updateTools();
+        return;
+      }
+
+      this.outlinerList.querySelectorAll('.outliner-item.selected')
+        .forEach(i => i.classList.remove('selected'));
+
+      this.selectObjectFromOutlinerItem(item);
+    });
+
+    this.dragDropReordering();
+    this.panelResizer.initOutlinerResizer();
+    this.setupListeners();
+  }
+
+  setupListeners() {
+    const rebuildAndSync = () => {
+      this.rebuild();
+      if (this.editSelection.editedObject) {
+        this.highlightOutlinerItem([this.editSelection.editedObject]);
+      } else {
+        this.highlightOutlinerItem(this.selection.selectedObjects);
+      }
+    };
+
+    this.signals.objectAdded.add(rebuildAndSync);
+    this.signals.objectRemoved.add(rebuildAndSync);
+    this.signals.objectChanged.add(rebuildAndSync);
+    this.signals.sceneGraphChanged.add(rebuildAndSync);
+    this.signals.objectSelected.add(selectedObjects => this.highlightOutlinerItem(selectedObjects));
+  }
+
+  rebuild() {
+    this.outlinerList.innerHTML = '';
+
+    const traverse = (object, depth = 0) => {
+      if (object.name === '__VertexPoints' || object.name === '__MirrorPreviews') return;
+
+      const li = document.createElement('li');
+      li.className = 'outliner-item';
+      li.dataset.uuid = object.uuid;
+      li.setAttribute('draggable', 'true');
+
+      for (let i = 0; i < depth; i++) {
+        const spacer = document.createElement('span');
+        spacer.className = 'space';
+        li.appendChild(spacer);
+      }
+
+      li.append('• ', object.name || object.type);
+      this.outlinerList.appendChild(li);
+
+      const sortedChildren = this.sortByNameOrType(object.children);
+      sortedChildren.forEach(child => traverse(child, depth + 1));
+    };
+
+    const sortedRoot = this.sortByNameOrType(this.scene.children);
+    sortedRoot.forEach(child => traverse(child));
+  }
+
+  sortByNameOrType(objects) {
+    return [...objects].sort((a, b) => {
+      const nameA = (a.name || a.type || '').toLowerCase();
+      const nameB = (b.name || b.type || '').toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+  }
+
+  dragDropReordering() {
+    let draggedItem = null;
+    let dropTarget = null;
+    let nextDropTarget = null;
+    let dropMode = null;
+
+    this.outlinerList.addEventListener('dragstart', (event) => {
+      const item = event.target.closest('.outliner-item');
+      if (!item) return;
+
+      // Prevent drag if multiple objects are selected
+      if (this.selection.selectedObjects.length > 1) {
+        event.preventDefault();
+        return;
+      }
+
+      document.querySelectorAll('.outliner-item').forEach(el => {
+        el.classList.remove('selected', 'dragTop', 'dragBottom', 'dragInto');
+      });
+
+      draggedItem = item;
+      this.selectObjectFromOutlinerItem(item, { replace: true });
+    });
+
+
+    this.outlinerList.addEventListener('dragover', (event) => {
+      event.preventDefault();
+
+      const target = event.target.closest('.outliner-item');
+      if (!target) return;
+
+      document.querySelectorAll('.outliner-item').forEach(el => {
+        el.classList.remove('dragTop', 'dragBottom', 'dragInto');
+      });
+
+      const bounding = target.getBoundingClientRect();
+      const offset = event.clientY - bounding.top;
+      const topQuarter = bounding.height * 0.25;
+      const bottomQuarter = bounding.height * 0.75;
+
+      if (offset < topQuarter) {
+        dropMode = 'before';
+        target.classList.add('dragTop');
+        nextDropTarget = target;
+      } else if (offset > bottomQuarter) {
+        dropMode = 'after';
+        target.classList.add('dragBottom');
+        nextDropTarget = target.nextElementSibling?.closest('.outliner-item') ?? null;
+      } else {
+        dropMode = 'child';
+        target.classList.add('dragInto');
+      }
+
+      dropTarget = target;
+    });
+
+    this.outlinerList.addEventListener('dragend', () => {
+      document.querySelectorAll('.outliner-item').forEach(el => {
+        el.classList.remove('dragTop', 'dragBottom', 'dragInto');
+      });
+      
+      if (dropTarget) {
+        const dropUuid = dropTarget.dataset.uuid;
+        const dragUuid = draggedItem.dataset.uuid;
+
+        const dropObject = this.scene.getObjectByProperty('uuid', dropUuid);
+        const dragObject = this.scene.getObjectByProperty('uuid', dragUuid);
+
+        let newParent = null;
+
+        if (dropMode === 'child') {
+          if (dragObject !== dropObject && !this.isAncestor(dropObject, dragObject)) {
+            newParent = dropObject;
+          }
+        } else if (dropMode === 'before' || dropMode === 'after') {
+          if (nextDropTarget === null) {
+            newParent = this.scene;
+          } else {
+            const nextDropUuid = nextDropTarget.dataset.uuid;
+            const nextDropObject = this.scene.getObjectByProperty('uuid', nextDropUuid);
+
+            const dropParent = nextDropObject.parent;
+            if (!dropParent || dragObject === dropParent || this.isAncestor(dropParent, dragObject)) {
+              return;
+            }
+            newParent = dropParent;
+          }
+        }
+        if (newParent && dragObject.parent !== newParent) {
+          this.editor.execute(new MoveObjectCommand(this.editor, dragObject, newParent));
+        }
+      }
+
+      dropTarget = nextDropTarget = dropMode = null;
+    });
+  }
+
+  isAncestor(child, possibleAncestor) {
+    let current = child.parent;
+    while (current) {
+      if (current === possibleAncestor) return true;
+      current = current.parent;
+    }
+    return false;
+  }
+
+  highlightOutlinerItem(selectedObjects) {
+    document.querySelectorAll('.outliner-item').forEach(el => {
+      el.classList.remove('selected');
+    });
+
+    if (!selectedObjects || selectedObjects.length === 0) return;
+
+    selectedObjects.forEach(obj => {
+      const objectItem = this.outlinerList.querySelector(`[data-uuid="${obj.uuid}"]`);
+      if (objectItem) objectItem.classList.add('selected');
+    });
+  }
+
+  selectObjectFromOutlinerItem(item, { replace = false } = {}) {
+    if (!item) return;
+
+    const uuid = item.dataset.uuid;
+    if (!uuid) return;
+
+    const object = this.scene.getObjectByProperty('uuid', uuid);
+    if (!object) return;
+
+    if (this.selection.tool) {
+      item.classList.add('selected');
+      this.signals.toolSelectObject.dispatch(object);
+      return;
+    } 
+    
+    this.selection.commitSelection(() => {
+      if (replace) this.selection.setSelection([object]);
+      else this.selection.applyPick(object, false);
+    });
+    this.toolbar.updateTools();
+  }
+}

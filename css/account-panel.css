@@ -1,0 +1,249 @@
+#overlay-root-account {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.account-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.account-panel {
+  position: relative;
+  background-color: #fff;
+  padding: 32px;
+  border-radius: 5px;
+  width: 420px;
+  color: #222;
+  font-family: sans-serif;
+  font-size: 14px;
+  border: 1px solid #e6e8eb;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.account-panel .account-title {
+  margin: 0;
+  font-size: 22px;
+  color: #111;
+  text-align: center;
+}
+
+.account-label {
+  font-size: 13px;
+  font-weight: normal;
+  color: #666;
+  letter-spacing: 0.2px;
+}
+
+.account-email {
+  font-size: 14px;
+  color: #222;
+  background-color: #fff;
+  border: 1px solid #e6e8eb;
+  border-radius: 3px;
+  padding: 10px;
+  word-break: break-all;
+}
+
+.account-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#account-projects,
+#account-logout {
+  width: 100%;
+  padding: 10px 0;
+  border-radius: 3px;
+  border: 1px solid #222;
+  background-color: #222;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+#account-projects {
+  border: 1px solid #222;
+  background-color: #222;
+  color: #fff;
+}
+
+#account-projects:hover {
+  background-color: #000;
+}
+
+#account-logout {
+  border: 1px solid #e6e8eb;
+  background-color: #fff;
+  color: #222;
+}
+
+#account-logout:hover {
+  border-color: #111;
+}
+
+.account-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.account-close:hover {
+  color: #111;
+}
+
+.account-billing {
+  border: 1px solid #e6e8eb;
+  border-radius: 6px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #fafbfc;
+}
+
+.billing-credits {
+  text-align: center;
+  padding: 12px;
+  border-radius: 4px;
+  background: #fff;
+  border: 1px solid #e6e8eb;
+}
+
+.billing-value {
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.billing-value.unlimited {
+  font-size: 22px;
+  color: #0a7cff;
+}
+
+.plan-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.billing-label {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.billing-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.billing-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.billing-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #111;
+}
+
+#account-plan.pro {
+  color: #0a7cff;
+  font-weight: 600;
+}
+
+#account-expiry {
+  margin-top: 2px;
+}
+
+/* Cancel button */
+.cancel-plan-btn {
+  margin-top: 0px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #ff4d4f;
+  background: transparent;
+  border: 1px solid #ff4d4f;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-block;
+}
+
+.cancel-plan-btn:hover {
+  background: #ff4d4f;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.cancel-plan-btn:active {
+  transform: translateY(0);
+  background: #e53935;
+}
+
+.cancel-plan-btn:disabled {
+  opacity: 0.5;
+  color: #888;
+  border-color: #888;
+  background: transparent;
+  cursor: not-allowed;
+  pointer-events: none;
+  transform: none;
+}
+
+.cancel-plan-btn:disabled:hover,
+.cancel-plan-btn:disabled:active {
+  background: transparent;
+  color: #888;
+  transform: none;
+}
+
+.upgrade-btn {
+  margin-top: 0px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #0a7cff;
+  background: transparent;
+  border: 1px solid #0a7cff;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-block;
+}
+
+.upgrade-btn:hover {
+  background: #006ae6;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.upgrade-btn:active {
+  transform: translateY(0);
+}

@@ -1,0 +1,206 @@
+import { MenubarFile } from './Menubar.File.js';
+import { MenubarEdit } from './Menubar.Edit.js';
+import { MenubarAdd } from './Menubar.Add.js';
+import { MenubarView } from './Menubar.View.js';
+import { MenubarHelp } from './Menubar.Help.js';
+import { auth } from '/supabase/services/AuthService.js';
+import { LoginPanel } from '../panels/LoginPanel.js';
+import { AccountPanel } from '../panels/AccountPanel.js';
+import { UpgradePanel } from '../panels/UpgradePanel.js';
+import { saveProject, projectExistsInCloud } from '/supabase/services/ProjectService.js';
+import { CloudSavePanel } from '../panels/CloudSavePanel.js';
+
+export default class Menubar {
+  constructor(editor) {
+    this.uiLoader = editor.uiLoader;
+    this.signals = editor.signals;
+
+    this.ready = this.load(editor);
+  }
+
+  async load(editor) {
+    await this.uiLoader.loadComponent('#menu-container', 'components/menu-bar.html');
+
+    // Initialize submenus
+    new MenubarFile(editor);
+    new MenubarEdit(editor);
+    new MenubarAdd(editor);
+    new MenubarView(editor);
+    new MenubarHelp(editor);
+
+    // Buttons
+    this.loginButton = document.querySelector('.login-button');
+    this.accountButton = document.querySelector('.account-button');
+    this.cloudSaveButton = document.querySelector('.cloud-save-button');
+    this.agentButton = document.querySelector('.agent-button');
+
+    this.loginPanel = new LoginPanel({ signals: this.signals });
+    this.accountPanel = new AccountPanel({ signals: this.signals });
+    this.cloudSavePanel = new CloudSavePanel({ editor, signals: this.signals });
+    this.upgradePanel = new UpgradePanel({ signals: this.signals });
+
+    this.cloudSaveLabel = this.cloudSaveButton.querySelector('.label');
+
+    this.loginButton.onclick = () => this.loginPanel.open();
+    this.accountButton.onclick = () => this.accountPanel.open();
+    this.cloudSaveButton.onclick = () => this.cloudSave(editor);
+    this.agentButton.onclick = async () => {
+      await editor.sidebar.ready;
+      const open = editor.sidebar.agentPanel.toggle();
+      this.agentButton.classList.toggle('active', open);
+    }
+
+    auth.signals.login.add(() => {
+      this.loginButton.classList.add('hidden');
+      this.accountButton.classList.remove('hidden');
+    });
+
+    auth.signals.logout.add(() => {
+      this.accountButton.classList.add('hidden');
+      this.loginButton.classList.remove('hidden');
+    });
+
+    if (auth.isLoggedIn()) {
+      this.loginButton.classList.add('hidden');
+      this.accountButton.classList.remove('hidden');
+    }
+
+    this.signals.showLoginPanel.add(() => {
+      this.loginPanel.open();
+    });
+
+    this.signals.showAccountPanel.add(() => {
+      this.accountPanel.open();
+    });
+
+    this.signals.showUpgradePanel.add((opts) => {
+      this.upgradePanel.open(opts);
+    });
+
+    this.signals.historyChanged.add(() => {
+      this.setSaveStatus(this.cloudSaveLabel, 'save');
+    });
+
+    this.signals.saveStatusChanged.add((state) => {
+      this.setSaveStatus(this.cloudSaveLabel, state);
+    });
+
+    this.signals.cloudSaveRequested.add(() => this.cloudSave(editor));
+
+    this.initMenuBar();
+  }
+
+  initMenuBar() {
+    function closeAllMenus() {
+      document
+        .querySelectorAll('.menu-item.active')
+        .forEach(m => m.classList.remove('active'));
+
+      // temporarily kill hover
+      document.body.classList.add('menu-closing');
+
+      requestAnimationFrame(() => {
+        document.body.classList.remove('menu-closing');
+      });
+    }
+
+    const menuItems = document.querySelectorAll('.menu-item');
+
+    menuItems.forEach(item => {
+      item.addEventListener('click', e => {
+
+        // ignore submenu clicks here
+        if (e.target.closest('.submenu')) return;
+
+        menuItems.forEach(i => {
+          if (i !== item) i.classList.remove('active');
+        });
+
+        item.classList.toggle('active');
+
+        e.stopPropagation();
+      });
+    });
+
+    document.addEventListener('click', e => {
+      const li = e.target.closest('.submenu li');
+      if (!li) return;
+
+      const isTrigger = li.classList.contains('submenu-item');
+      const clickedRightSubmenu = e.target.closest('.submenu.right');
+
+      if (isTrigger && !clickedRightSubmenu) {
+        return;
+      }
+
+      closeAllMenus();
+    });
+
+    // Close menu when hovering outside
+    let closeTimeout = null;
+
+    document.addEventListener('mousemove', e => {
+      const activeMenu = document.querySelector('.menu-item.active');
+      if (!activeMenu) return;
+
+      const submenu = activeMenu.querySelector('.submenu');
+
+      if (activeMenu.contains(e.target) ||
+          (submenu && submenu.contains(e.target))) {
+        clearTimeout(closeTimeout);
+        return;
+      }
+
+      closeTimeout = setTimeout(() => {
+        activeMenu.classList.remove('active');
+      }, 300);
+    });
+  }
+
+  setSaveStatus(labelEl, state) {
+    switch (state) {
+      case 'save':
+        labelEl.textContent = 'Save';
+        break;
+      case 'saving':
+        labelEl.textContent = 'Saving';
+        break;
+      case 'saved':
+        labelEl.textContent = 'Saved';
+        break;
+      case 'error':
+        labelEl.textContent = 'Error';
+        break;
+    }
+  }
+
+  async cloudSave(editor) {
+    if (this.isSaving) return;
+
+    if (!auth.isLoggedIn()) {
+      this.signals.showLoginPanel.dispatch();
+      return;
+    }
+
+    this.isSaving = true;
+    try {
+      const exists = await projectExistsInCloud(editor.currentProjectId);
+      if (!exists) {
+        this.cloudSavePanel.open();
+        return;
+      }
+
+      this.setSaveStatus(this.cloudSaveLabel, 'saving');
+      await saveProject(editor, { override: true });
+      this.setSaveStatus(this.cloudSaveLabel, 'saved');
+    } catch (err) {
+      console.error(err);
+      if (err.reason === 'size_exceeded') {
+        alert(`Your project (${err.sizeMB} MB) exceeds the 50 MB upload limit.`);
+      }
+      this.setSaveStatus(this.cloudSaveLabel, 'error');
+    } finally {
+      this.isSaving = false;
+    }
+  }
+}

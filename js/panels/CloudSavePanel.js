@@ -1,0 +1,171 @@
+import { saveProject } from '/supabase/services/ProjectService.js';
+import { auth } from '/supabase/services/AuthService.js';
+import { getCreditsErrorMessage } from '/supabase/services/CreditsService.js';
+import { Dropdown } from '../ui/DropDown.js';
+
+export class CloudSavePanel {
+  constructor({ rootSelector = 'body', editor, signals } = {}) {
+    this.root = document.querySelector(rootSelector);
+    this.signals = signals;
+    this.editor = editor;
+
+    this.load();
+  }
+
+  load() {
+    const template = `
+      <div id="cloudsave-overlay" class="cloudsave-overlay hidden">
+        <div class="cloudsave-panel">
+          <button id="cloudsave-close" class="cloudsave-close" aria-label="Close">✕</button>
+
+          <h3 class="cloudsave-title">Save Project</h3>
+
+          <!-- Project name -->
+          <div class="cloudsave-section">
+            <div class="cloudsave-label">Project Name</div>
+            <input 
+              id="cloudsave-name" 
+              class="cloudsave-input" 
+              type="text" 
+              placeholder="Untitled Project"
+            />
+          </div>
+
+          <div class="cloudsave-section">
+            <div class="cloudsave-label">Visibility</div>
+            <div id="cloudsave-visibility"></div>
+          </div>
+
+          <div id="cloudsave-error" class="error"></div>
+
+          <div class="cloudsave-actions">
+            <button id="cloudsave-save" class="primary">Save</button>
+            <button id="cloudsave-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this.root.insertAdjacentHTML('beforeend', template);
+
+    this.overlay = document.getElementById('cloudsave-overlay');
+    this.nameInput = document.getElementById('cloudsave-name');
+    this.nameInput.maxLength = 40;
+    this.errorEl = document.getElementById('cloudsave-error');
+    this.visibilitySelect = document.getElementById('cloudsave-visibility');
+
+    this.saveBtn = document.getElementById('cloudsave-save');
+    this.cancelBtn = document.getElementById('cloudsave-cancel');
+
+    this.visibilityDropdown = new Dropdown(
+      this.visibilitySelect,
+      {
+        options: [
+          {
+            value: 'private',
+            label: 'Private',
+            icon: '<img src="/assets/icons/lock-black.svg" alt="Private" width="15" height="15" />',
+            desc: 'You are the only one who can see this project.',
+          },
+          {
+            value: 'public',
+            label: 'Public',
+            icon: '<img src="/assets/icons/globe-black.svg" alt="Public" width="15" height="15" />',
+            desc: 'Anyone on the internet can see this project.',
+          },
+        ],
+        value: 'private',
+      }
+    );
+
+    document
+      .getElementById('cloudsave-close')
+      .addEventListener('click', () => this.close());
+
+    this.cancelBtn.addEventListener('click', () => this.close());
+
+    this.saveBtn.addEventListener('click', () => this.handleSave());
+
+    this.nameInput.addEventListener('input', () => {
+      this.clearError();
+    });
+  }
+
+  async open() {
+    this.signals?.disableKeyHandler.dispatch(true);
+    const user = await auth.waitForUser();
+
+    if (!user) return;
+
+    this.nameInput.value = this.editor.currentProjectName || 'Untitled Project';
+
+    this.overlay.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    this.nameInput.focus();
+    this.clearError();
+  }
+
+  close() {
+    this.signals?.disableKeyHandler.dispatch(false);
+    this.overlay.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+
+  async handleSave() {
+    const name = this.nameInput.value.trim();
+    const isPublic = this.visibilityDropdown.value === 'public';
+
+    if (!name) {
+      this.showError('Please enter a project name.');
+      return;
+    }
+
+    try {
+      this.saveBtn.disabled = true;
+      this.saveBtn.textContent = 'Saving...';
+
+      // Save into editor state
+      this.editor.signals.saveStatusChanged.dispatch('saving');
+      this.editor.currentProjectName = name;
+
+      await saveProject(this.editor, { name, isPublic });
+
+      this.editor.signals.saveStatusChanged.dispatch('saved');
+      this.close();
+    } catch (err) {
+      console.error('Save failed:', err);
+      this.editor.signals.saveStatusChanged.dispatch('error');
+
+      if (err.reason === 'no_credits') {
+        this.close();
+        this.editor.signals.showUpgradePanel.dispatch({ plan: err.plan });
+        return;
+      }
+
+      if (err.reason === 'no_session') {
+        this.close();
+        this.editor.signals.showLoginPanel.dispatch();
+        return;
+      }
+
+      if (err.reason === 'size_exceeded') {
+        this.showError(`Your project (${err.sizeMB} MB) exceeds the 50 MB upload limit.`);
+      } else {
+        this.showError(getCreditsErrorMessage(err.reason) ?? 'Save failed.');
+      }
+    } finally {
+      this.saveBtn.disabled = false;
+      this.saveBtn.textContent = 'Save';
+    }
+  }
+
+  showError(message) {
+    this.errorEl.textContent = message;
+    this.errorEl.classList.add('visible');
+  }
+
+  clearError() {
+    this.errorEl.textContent = '';
+    this.errorEl.classList.remove('visible');
+  }
+}

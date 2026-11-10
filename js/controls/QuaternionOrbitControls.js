@@ -1,0 +1,487 @@
+import { Vector2, Vector3, Quaternion, Box3, Sphere } from 'three';
+
+export class QuaternionOrbitControls {
+	constructor(camera, domElement, { signals, keyHandler, target } = {}) {
+    this.signals = signals ?? {
+      switchCameraView: { dispatch: () => {} }
+    };
+		
+    this.keyHandler = keyHandler ?? {
+      startInteraction: () => true,
+      endInteraction: () => {},
+      activeInteraction: null
+    };
+
+		this.camera = camera;
+		this.domElement = domElement;
+		this.target = target ?? new Vector3();
+		this.enabled = true;
+
+		this.moveCurr = new Vector2();
+		this.movePrev = new Vector2();
+
+		this.rotateSpeed = 3.5;
+		this.zoomSpeed = 2.0;
+		this.panSpeed = 0.8;
+
+		this.eye = new Vector3();
+
+		this._state = null;
+		this._gesture = null;
+		this._lastTrackpadTime = 0;
+		this._gestureLockTimeout = 150;
+
+		this._transformDragging = false;
+		this._onTransformDragStarted = () => { this._transformDragging = true; };
+		this._onTransformDragEnded = () => { this._transformDragging = false; };
+		this.signals.transformDragStarted.add(this._onTransformDragStarted);
+		this.signals.transformDragEnded.add(this._onTransformDragEnded);
+
+		this._bindEvents();
+	}
+
+	_bindEvents() {
+		this._onMouseDownBound = this._onMouseDown.bind(this);
+    this._onMouseWheelBound = this._onMouseWheel.bind(this);
+
+		this._onTouchStartBound = this._onTouchStart.bind(this);
+		this._onTouchMoveBound = this._onTouchMove.bind(this);
+		this._onTouchEndBound = this._onTouchEnd.bind(this);
+
+		this.domElement.addEventListener('mousedown', this._onMouseDownBound);
+		this.domElement.addEventListener('wheel', this._onMouseWheelBound);
+
+		this.domElement.addEventListener('touchstart', this._onTouchStartBound, { passive: false });
+		this.domElement.addEventListener('touchmove', this._onTouchMoveBound, { passive: false });
+		this.domElement.addEventListener('touchend', this._onTouchEndBound);
+		this.domElement.addEventListener('touchcancel', this._onTouchEndBound);
+	}
+
+	dispose() {
+    this.domElement.removeEventListener('mousedown', this._onMouseDownBound);
+    this.domElement.removeEventListener('wheel', this._onMouseWheelBound);
+
+		this.domElement.removeEventListener('touchstart', this._onTouchStartBound);
+    this.domElement.removeEventListener('touchmove', this._onTouchMoveBound);
+    this.domElement.removeEventListener('touchend', this._onTouchEndBound);
+    this.domElement.removeEventListener('touchcancel', this._onTouchEndBound);
+	}
+
+	_getMouseOnCircle(x, y) {
+		const rect = this.domElement.getBoundingClientRect();
+		return new Vector2(
+			((x - rect.left) / rect.width) * 2 - 1,
+			-((y - rect.top) / rect.height) * 2 + 1
+		);
+	}
+
+	_onMouseDown(event) {
+		if (!this.enabled || this._transformDragging || event.button !== 1) return;
+		if (!this.keyHandler.startInteraction('orbit')) return;
+
+		const type = event.shiftKey ? 'pan' : 'orbit';
+		this._state = type;
+		this.movePrev.copy(this._getMouseOnCircle(event.clientX, event.clientY));
+		this._startButton = event.button;
+
+		if (this._state === 'orbit' && this.camera.isDefault && this.camera.isOrthographicCamera) {
+			this.signals.switchCameraView.dispatch('PERSPECTIVE');
+		}
+
+		const onMouseMove = (event) => {
+			this.moveCurr.copy(this._getMouseOnCircle(event.clientX, event.clientY));
+
+			const moveDelta = new Vector2().subVectors(this.moveCurr, this.movePrev);
+			if (moveDelta.lengthSq() === 0) return;
+
+			if (this._state === 'orbit') {
+				this._rotateCamera(moveDelta.x, moveDelta.y);
+			} else if (this._state === 'pan') {
+				this._panCamera(moveDelta.x, moveDelta.y);
+			}
+
+			this.movePrev.copy(this.moveCurr);
+		};
+
+		const onMouseUp = (event) => {
+			if (event.button !== this._startButton) return;
+			window.removeEventListener('mousemove', onMouseMove);
+			window.removeEventListener('mouseup', onMouseUp);
+			this._state = null;
+
+			this.keyHandler.endInteraction('orbit');
+		};
+
+		window.addEventListener('mousemove', onMouseMove);
+		window.addEventListener('mouseup', onMouseUp);
+	}
+
+	_onTouchStart(event) {
+		if (!this.enabled || this._transformDragging) return;
+		if (this.keyHandler.activeInteraction === 'box-select') return;
+
+		if (event.touches.length === 1) {
+			if (!this.keyHandler.startInteraction('orbit')) return;
+			this._state = 'orbit';
+			this.movePrev.copy(this._getMouseOnCircle(event.touches[0].clientX, event.touches[0].clientY));
+
+			if (this.camera.isDefault && this.camera.isOrthographicCamera) {
+				this.signals.switchCameraView.dispatch('PERSPECTIVE');
+			}
+		} else if (event.touches.length === 2) {
+			if (this._state === 'orbit') {
+				this.keyHandler.endInteraction('orbit');
+				this._state = null;
+			}
+			
+			if (!this.keyHandler.startInteraction('pan')) return;
+			this._state = 'pan-zoom';
+
+			const dx = event.touches[0].clientX - event.touches[1].clientX;
+			const dy = event.touches[0].clientY - event.touches[1].clientY;
+			this._touchZoomDistance = Math.sqrt(dx * dx + dy * dy);
+
+			const cx = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+      const cy = (event.touches[0].clientY + event.touches[1].clientY) / 2;
+      this.movePrev.copy(this._getMouseOnCircle(cx, cy));
+		}
+	}
+
+	_onTouchMove(event) {
+		if (!this.enabled || !this._state) return;
+
+		if (this.keyHandler.activeInteraction === 'box-select') {
+			this._state = null;
+			return;
+		}
+		event.preventDefault();
+
+		if (this._state === 'orbit' && event.touches.length === 1) {
+			this.moveCurr.copy(this._getMouseOnCircle(event.touches[0].clientX, event.touches[0].clientY));
+			const moveDelta = new Vector2().subVectors(this.moveCurr, this.movePrev);
+
+			if (moveDelta.lengthSq() > 0) {
+				this._rotateCamera(moveDelta.x, moveDelta.y);
+			}
+			this.movePrev.copy(this.moveCurr);
+		} else if (this._state === 'pan-zoom' && event.touches.length === 2) {
+			// Handle Zoom
+			const dx = event.touches[0].clientX - event.touches[1].clientX;
+			const dy = event.touches[0].clientY - event.touches[1].clientY;
+			const distance = Math.sqrt(dx * dx + dy * dy);
+
+			const zoomDelta = this._touchZoomDistance - distance;
+			if (zoomDelta !== 0) {
+				this._zoom(zoomDelta, 0.002);
+			}
+			this._touchZoomDistance = distance;
+
+			// Handle Pan
+			const cx = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+			const cy = (event.touches[0].clientY + event.touches[1].clientY) / 2;
+			this.moveCurr.copy(this._getMouseOnCircle(cx, cy));
+
+			const moveDelta = new Vector2().subVectors(this.moveCurr, this.movePrev);
+			if (moveDelta.lengthSq() > 0) {
+				this._panCamera(moveDelta.x, moveDelta.y);
+			}
+			this.movePrev.copy(this.moveCurr);
+		}
+	}
+
+	_onTouchEnd(event) {
+		if (!this.enabled) return;
+
+		if (this._state === 'orbit') {
+			this.keyHandler.endInteraction('orbit');
+		} else if (this._state === 'pan-zoom') {
+			this.keyHandler.endInteraction('pan');
+		}
+
+		this._state = null;
+
+		// If the user lifts one finger but leaves another on the screen, transition back to orbiting smoothly
+		if (event.touches.length === 1) {
+			this._state = 'orbit';
+      this.movePrev.copy(this._getMouseOnCircle(event.touches[0].clientX, event.touches[0].clientY));
+      this.keyHandler.startInteraction('orbit');
+		}
+	}
+
+	_onMouseWheel(event) {
+		if (!this.enabled || this._transformDragging) return;
+		if (this.keyHandler.activeInteraction) return;
+
+		if (event.defaultPrevented) return;
+
+		let deltaX = event.deltaX;
+		let deltaY = event.deltaY;
+
+		// Normalize
+		if (event.deltaMode === 1) {
+			deltaX *= 16;
+			deltaY *= 16;
+		}
+
+		const isTrackpad = (Math.abs(deltaX) + Math.abs(deltaY)) < 100;
+
+		if (isTrackpad) {
+			event.preventDefault();
+			const now = performance.now();
+
+			// Check if enough time has passed to start a NEW gesture
+			if (now - this._lastTrackpadTime > this._gestureLockTimeout) {
+				if (event.ctrlKey || event.metaKey) {
+					this._gesture = 'zoom';
+				} else if (event.shiftKey) {
+					this._gesture = 'pan';
+				} else {
+					this._gesture = 'orbit';
+				}
+			}
+
+			this._lastTrackpadTime = now;
+
+			if (this._gesture === 'orbit' && this.camera.isDefault && this.camera.isOrthographicCamera) {
+				this.signals.switchCameraView.dispatch('PERSPECTIVE');
+			}
+
+			switch (this._gesture) {
+				case 'orbit':
+					this._rotateCamera(deltaX, deltaY, 0.001);
+					break;
+				case 'pan':
+					this._panCamera(deltaX, deltaY, 0.001);
+					break;
+				case 'zoom':
+					this._zoom(deltaY, 0.004);
+					break;
+			}
+
+			return;
+		}
+
+		// Standard Mouse Wheel (Non-trackpad)
+		event.preventDefault();
+		this._zoom(deltaY, 0.0005);
+	}
+
+	_zoom(delta, scaleFactor = 1) {
+		if (this.camera.isPerspectiveCamera) {
+			this.eye.subVectors(this.camera.position, this.target);
+
+			const zoomFactor = 1 + delta * scaleFactor * this.zoomSpeed;
+
+			this.eye.multiplyScalar(zoomFactor);
+			this.camera.position.copy(this.target).add(this.eye);
+			this.camera.lookAt(this.target);
+
+			this.camera.updateProjectionMatrix();
+		} else if (this.camera.isOrthographicCamera) {
+			const zoomFactor = 1 - delta * scaleFactor * this.zoomSpeed;
+
+			const minZoom = 0.01;
+			const maxZoom = 100;
+
+			this.camera.zoom = Math.max(
+				minZoom,
+				Math.min(maxZoom, this.camera.zoom * zoomFactor)
+			);
+
+			this.camera.updateProjectionMatrix();
+		}
+	}
+
+	_panCamera(deltaX, deltaY, scaleFactor = 1) {
+		const eyeDirection = this.eye.clone().normalize();
+		const cameraUp = this.camera.up.clone().normalize();
+		const right = new Vector3().crossVectors(cameraUp, eyeDirection).normalize();
+
+		let panX, panY;
+
+		if (this.camera.isPerspectiveCamera) {
+			const eye = new Vector3().subVectors(this.camera.position, this.target);
+			const eyeLength = eye.length();
+
+			panX = -deltaX * scaleFactor * eyeLength * this.panSpeed;
+			panY = -deltaY * scaleFactor * eyeLength * this.panSpeed;
+		} else if (this.camera.isOrthographicCamera) {
+			const width = this.camera.right - this.camera.left;
+			const height = this.camera.top - this.camera.bottom;
+
+			const scaleX = width / this.camera.zoom;
+			const scaleY = height / this.camera.zoom;
+
+			panX = -deltaX * scaleFactor * scaleX * this.panSpeed;
+			panY = -deltaY * scaleFactor * scaleY * this.panSpeed;
+		}
+
+		const panOffset = new Vector3().addScaledVector(right, panX).addScaledVector(cameraUp, panY);
+
+		this.camera.position.add(panOffset);
+		this.target.add(panOffset);
+		this.camera.lookAt(this.target);
+	}
+
+	_rotateCamera(deltaX, deltaY, scaleFactor = 1) {
+		this.eye.subVectors(this.camera.position, this.target);
+
+    const angleYaw = -deltaX * scaleFactor * this.rotateSpeed;
+    const anglePitch = deltaY * scaleFactor * this.rotateSpeed;
+
+		const eyeDirection = this.eye.clone().normalize();
+		const upDirection = this.camera.up.clone().normalize();
+    const worldYAxis = new Vector3(0, 1, 0);
+		const worldUp = worldYAxis.clone().multiplyScalar(upDirection.dot(worldYAxis)).normalize();
+
+		const rightDirection = new Vector3().crossVectors(upDirection, eyeDirection);
+		if (rightDirection.lengthSq() < 1e-10) return;
+		rightDirection.normalize();
+
+    // Create pitch quaternion around right dicrection
+    const quatPitch = new Quaternion().setFromAxisAngle(rightDirection, anglePitch);
+
+    // Create yaw quaternion around world up
+    const quatYaw = new Quaternion().setFromAxisAngle(worldUp, angleYaw);
+
+    const combinedQuat = new Quaternion().multiplyQuaternions(quatYaw, quatPitch);
+
+    this.eye.applyQuaternion(combinedQuat);
+    this.camera.up.applyQuaternion(combinedQuat);
+
+    this.camera.position.copy(this.target).add(this.eye);
+    this.camera.lookAt(this.target);
+
+    this.movePrev.copy(this.moveCurr);
+	}
+
+	_focusObjects(targetObjects) {
+		const box = new Box3();
+		const sphere = new Sphere();
+
+		const objects = Array.isArray(targetObjects) ? targetObjects : [targetObjects];
+		if (objects.length === 0) return;
+		objects.forEach(obj => {box.expandByObject(obj)});
+
+		let distance;
+
+		if (!box.isEmpty()) {
+			box.getCenter(this.target);
+			box.getBoundingSphere(sphere);
+			distance = sphere.radius;
+		} else {
+			objects[0].getWorldPosition(this.target);
+			distance = 0.5;
+		}
+
+		this.eye.set(0, 0, 1);
+		this.eye.applyQuaternion(this.camera.quaternion);
+		this.eye.multiplyScalar(distance * 4);
+
+		this.camera.position.copy(this.target).add(this.eye);
+		this.camera.lookAt(this.target);
+	}
+
+	_focusPoint(point, distance) {
+		if (!point) return;
+
+		const viewDir = new Vector3()
+			.subVectors(this.camera.position, this.target)
+			.normalize();
+
+		if (viewDir.lengthSq() === 0) {
+			viewDir.set(0, 0, 1).applyQuaternion(this.camera.quaternion);
+		}
+
+		const minDistance = 0.05;
+		const finalDistance = Math.max(distance ?? 1, minDistance);
+
+		this.target.copy(point);
+
+		this.eye.copy(viewDir).multiplyScalar(finalDistance);
+
+		this.camera.position.copy(this.target).add(this.eye);
+		this.camera.lookAt(this.target);
+	}
+
+	_focusOrigin() {
+		const distance = 10;
+		this.eye.subVectors(this.camera.position, this.target);
+		this.target.set(0, 0, 0);
+
+		if (this.eye.lengthSq() === 0) {
+			this.eye.set(0, 0, 1);
+		}
+
+		this.eye.normalize().multiplyScalar(distance);
+
+		this.camera.up.set(0, 1, 0);
+		this.camera.position.copy(this.target).add(this.eye);
+		this.camera.lookAt(this.target);
+	}
+
+	reset() {
+		this.target.set(0, 0, 0);
+		this.eye.set(0, 0, 0);
+
+		this.moveCurr.set(0, 0);
+		this.movePrev.set(0, 0);
+
+		this._state = null;
+	}
+
+	_safeUp(eyeDir) {
+    const up = new Vector3(0, 1, 0);
+    if (Math.abs(up.dot(eyeDir)) > 0.99) {
+      up.set(0, 0, eyeDir.y >= 0 ? 1 : -1);
+    }
+    return up;
+	}
+
+	convertOrthoToPerspective() {
+		const dir = this.camera.getWorldDirection(new Vector3());
+		const frustumSize = this.camera.userData.frustumSize || 2;
+		const zoom = this.camera.zoom;
+		const distance = frustumSize / zoom;
+
+		this.eye.copy(dir.multiplyScalar(-distance));
+	}
+
+	updateFromState(isOrthographic) {
+		if (this.target.lengthSq() !== 0 || this.eye.lengthSq() !== 0) {
+			this.camera.position.copy(this.target).add(this.eye);
+
+			if (isOrthographic) {
+				const eyeDir = this.eye.clone().negate().normalize();
+				this.camera.up.copy(this._safeUp(eyeDir));
+			}
+
+			this.camera.lookAt(this.target);
+		}
+	}
+
+	toJSON() {
+		if (this.camera.isPerspectiveCamera) {
+			return {
+				target: this.target.toArray(),
+				eye: this.eye.toArray(),
+			};
+		} else if (this.camera.isOrthographicCamera) {
+			this.convertOrthoToPerspective();
+
+			return {
+				target: this.target.toArray(),
+				eye: this.eye.toArray(),
+				orthographic: true
+			};
+		}
+	}
+
+	fromJSON(json) {
+		if (!json) return;
+
+		this.target.fromArray(json.target);
+		this.eye.fromArray(json.eye);
+		this.updateFromState(json.orthographic);
+	}
+}
