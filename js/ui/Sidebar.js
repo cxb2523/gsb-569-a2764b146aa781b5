@@ -2,6 +2,7 @@ import { SidebarScene } from './Sidebar.Scene.js'
 import { SidebarProject } from './Sidebar.Project.js';
 import { SidebarSetting } from './Sidebar.Setting.js';
 import { AgentPanel } from '../panels/AgentPanel.js';
+import { MeshRepairPanel } from '../panels/MeshRepairPanel.js';
 import { CommandRegistry } from '../agent/CommandRegistry.js';
 import { registerAgentCommands } from '../agent/AgentCommands.js';
 
@@ -49,6 +50,8 @@ export default class Sidebar {
       container: document.getElementById('agent-tab'),
       tab: document.querySelector('.right-panel .tab[data-tab="agent"]'),
     });
+
+    this.meshRepairPanel = new MeshRepairPanel(editor, document.getElementById('repair-tab'));
 
     this.panelResizer.initRightPanelResizer();
     requestAnimationFrame(() => this.panelResizer.onWindowResize());

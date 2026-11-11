@@ -1,0 +1,94 @@
+.repair-panel {
+  padding: 0 0 10px 0;
+  font-size: 12.5px;
+  color: #444;
+}
+
+.repair-title {
+  margin: 12px 10px 4px 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.repair-subtitle {
+  margin: 10px 10px 4px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #333;
+}
+
+.repair-panel .project-settings-list {
+  font-size: 12.5px;
+}
+
+.repair-panel .setting-option input[type="number"] {
+  width: 90px;
+  padding: 2px 4px;
+  font-size: 12.5px;
+  color: #444;
+  background-color: #fff;
+  border: 1px solid #ccc;
+}
+
+.repair-results {
+  padding: 4px 10px;
+}
+
+.repair-object {
+  margin: 6px 0;
+  font-weight: 600;
+  color: #333;
+}
+
+.repair-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 8px 0;
+}
+
+.repair-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 6px;
+  background-color: #fff;
+  border: 1px solid #e2e2e2;
+}
+
+.repair-stat-label {
+  color: #555;
+}
+
+.repair-stat-value {
+  font-weight: 600;
+  color: #08f;
+  font-variant-numeric: tabular-nums;
+}
+
+.repair-empty {
+  margin: 8px 0;
+  color: #888;
+  font-style: italic;
+}
+
+.repair-error {
+  margin: 8px 0;
+  color: #e05;
+}
+
+.repair-warnings {
+  list-style: none;
+  margin: 4px 0 8px 0;
+  padding: 0;
+}
+
+.repair-warning-item {
+  padding: 4px 6px;
+  margin-bottom: 2px;
+  background-color: #fff8e6;
+  border-left: 3px solid #e6a700;
+  color: #7a5c00;
+  word-break: break-word;
+}
